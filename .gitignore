@@ -1,0 +1,46 @@
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+learn/dist
+learn/dist-*
+learn/cabal-dev
+learn/*.o
+learn/*.hi
+learn/*.chi
+learn/*.chs.h
+learn/*.dyn_o
+learn/*.dyn_hi
+learn/.hpc
+learn/.hsenv
+learn/.cabal-sandbox/
+learn/cabal.sandbox.config
+learn/*.prof
+learn/*.aux
+learn/*.hp
+learn/*.eventlog
+learn/.stack-work/
+learn/cabal.project.local
+
+.vscode/*
+
+# scala
+target/
