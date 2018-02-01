@@ -1,9 +1,8 @@
 package landcraft.model
 
 class InvalidCoord
-class InvalidMove
 
-class PlainMap(val size: Int) {
+class Map(val size: Int) {
     case class Coord(x: Int, y: Int) {
         if (x < 0 || x >= size || y < 0 || y >= size)
             throw new InvalidCoord
@@ -15,7 +14,7 @@ class PlainMap(val size: Int) {
             visibleFrom(from, mp)
         def visibleFrom(from: Coord, vr: Int) =
             distance(from) <= vr
-        def move(dir: Direction) = dir match {
+        def move(dir: Direction.Value) = dir match {
             case Direction.Up => Coord(x, y + 1)
             case Direction.Down => Coord(x, y - 1)
             case Direction.Left => Coord(x - 1, y)
@@ -23,45 +22,37 @@ class PlainMap(val size: Int) {
         }
     }
 
-    object Direction extends Enumeration {
-        type Direction = Value
-        val Up, Down, Left, Right = Value
-    }
-
-    case class UnitAttribute(
-        name: String,
-        team: Team,
-        hitPoint: Int,
-        movePoint: Int,
-        visionRadius: Int,
-        attackRadius: Int,
-        attackPoint: Int,
-        attackDamage: Int
-    )
-
-    class Unit(
-        val position: Coord,
-        val attribute: UnitAttribute,
-        val state: UnitAttribute
-    ) {
-        def dealDamage = (attribute.attackDamage, new Unit(
-            position, attribute, state.copy(attackPoint = state.attackPoint - 1))
-        def takeDamage(damage: Int) = new Unit(
-            position,
-            attribute,
-            state.copy(
-                hitPoint = state.hitPoint - damage
-            )
-        )
-        def dead = state.hitPoint <= 0
-        def move(dir: Direction) = {
-            val target = position move dir
-            if (state.movePoint < 1) throw new InvalidMove
-            if (target movableFrom position)
-                new Unit(target, attribute, state.copy(movePoint = state.movePoint - 1))
-            else
-                throw new InvalidCoord
+    def visionOf(unit: Unit) = {
+        val result = collection.mutable.Set[Map#Coord]()
+        val toExplore = collection.mutable.Queue[Map#Coord](unit.position)
+        while (toExplore.isEmpty) {
+            val c = toExplore.dequeue()
+            result += c
+            for (dir <- Direction.values) {
+                val nc = c move dir
+                if (!result(nc) && nc visibleFrom (unit.position, unit.visionRadius))
+                    toExplore.enqueue(nc)
+            }
         }
-        def reset = new Unit(position, attribute, attribute)
+        result
     }
+    def attackRangeOf(unit: Unit) = {
+        val result = collection.mutable.Set[Map#Coord]()
+        val toExplore = collection.mutable.Queue[Map#Coord](unit.position)
+        while (toExplore.isEmpty) {
+            val c = toExplore.dequeue()
+            result += c
+            for (dir <- Direction.values) {
+                val nc = c move dir
+                if (!result(nc) && nc visibleFrom (unit.position, unit.attackRadius))
+                    toExplore.enqueue(nc)
+            }
+        }
+        result
+    }
+}
+
+object Direction extends Enumeration {
+    type Direction = Value
+    val Up, Down, Left, Right = Value
 }
