@@ -44,3 +44,4 @@ learn/cabal.project.local
 
 # scala
 target/
+*.class

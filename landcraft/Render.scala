@@ -2,7 +2,7 @@ package landcraft.render
 
 import landcraft.model._
 
-class Canvas(size: Int) {
+private class Canvas(size: Int) {
     val data = new Array[Short](size * size * 3)
     class Pixel(x: Int, y: Int) {
         private val base = (x * size + y) * 3
@@ -20,15 +20,31 @@ class Canvas(size: Int) {
         p.g = rgb._2
         p.b = rgb._3
     }
-    def line(a: (Int, Int), b: (Int, Int)) {
-        
+    def vertLine(x0: Int, x1: Int, y: Int, color: (Short, Short, Short)) {
+        for (i <- x0 to x1)
+          this(i, y) = color
+    }
+    def horiLine(x: Int, y0: Int, y1: Int, color: (Short, Short, Short)) {
+        for (i <- y0 to y1)
+          this(x, i) = color
     }
 }
 
 package object Render {
     val canvas_size = 500
+    val margin_size = 5
+    val gridline_color = (255, 255, 255) : (Short, Short, Short)
     def render(map: Map, units: Set[Unit]) {
         val canvas = new Canvas(canvas_size)
+        val grid_size = (canvas_size - 2 * margin_size) / map.size
+        val mapToCanvas = (m: (Int, Int)) => {
+            val f = (x: Int) => margin_size + x * grid_size
+            (f(m._1), f(m._2))
+        }
+        for (i <- margin_size to (canvas_size - margin_size) by grid_size) {
+            canvas.vertLine(margin_size, canvas_size - margin_size, i, gridline_color)
+            canvas.horiLine(i, margin_size, canvas_size - margin_size, gridline_color)
+        }
 
     }
 }

@@ -1,27 +1,26 @@
 package landcraft.model
 
-case class Coord(x: Int, y: Int) {
-    if (x < 0 || x >= size || y < 0 || y >= size)
-        throw new InvalidCoord
-
-    def distance(other: Coord) =
-        Math.sqrt((x - other.x) * (x - other.x)
-            + (y - other.y) * (y - other.y)).asInstanceOf[Int]
-    def movableFrom(from: Coord, mp: Int = 1) =
-        visibleFrom(from, mp)
-    def visibleFrom(from: Coord, vr: Int) =
-        distance(from) <= vr
-    def move(dir: Direction.Value) = dir match {
-        case Direction.Up => Coord(x, y + 1)
-        case Direction.Down => Coord(x, y - 1)
-        case Direction.Left => Coord(x - 1, y)
-        case Direction.Right => Coord(x + 1, y)
-    }
-}
-
-class InvalidCoord
+class InvalidCoord extends Throwable
 
 class Map(val size: Int) {
+    case class Coord(x: Int, y: Int) {
+        if (x < 0 || x >= size || y < 0 || y >= size)
+          throw InvalidCoord
+        def distance(other: Coord) =
+            Math.sqrt((x - other.x) * (x - other.x)
+                + (y - other.y) * (y - other.y)).asInstanceOf[Int]
+        def movableFrom(from: Coord, mp: Int = 1) =
+            visibleFrom(from, mp)
+        def visibleFrom(from: Coord, vr: Int) =
+            distance(from) <= vr
+        def move(dir: Direction.Value) = dir match {
+            case Direction.Up => Coord(x, y + 1)
+            case Direction.Down => Coord(x, y - 1)
+            case Direction.Left => Coord(x - 1, y)
+            case Direction.Right => Coord(x + 1, y)
+        }
+    }
+
     def visionOf(unit: Unit) = {
         val result = collection.mutable.Set[Coord]()
         val toExplore = collection.mutable.Queue[Coord](unit.position)
@@ -30,7 +29,7 @@ class Map(val size: Int) {
             result += c
             for (dir <- Direction.values) {
                 val nc = c move dir
-                if (!result(nc) && nc visibleFrom (unit.position, unit.visionRadius))
+                if (!result(nc) && (nc visibleFrom (unit.position, unit.state.visionRadius)))
                     toExplore.enqueue(nc)
             }
         }
@@ -44,7 +43,7 @@ class Map(val size: Int) {
             result += c
             for (dir <- Direction.values) {
                 val nc = c move dir
-                if (!result(nc) && nc visibleFrom (unit.position, unit.attackRadius))
+                if (!result(nc) && (nc visibleFrom (unit.position, unit.state.attackRadius)))
                     toExplore.enqueue(nc)
             }
         }
