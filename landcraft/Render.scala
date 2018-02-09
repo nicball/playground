@@ -20,11 +20,11 @@ private class Canvas(size: Int) {
         p.g = rgb._2
         p.b = rgb._3
     }
-    def vertLine(x0: Int, x1: Int, y: Int, color: (Short, Short, Short)) {
+    def vert_line(x0: Int, x1: Int, y: Int, color: (Short, Short, Short)) {
         for (i <- x0 to x1)
           this(i, y) = color
     }
-    def horiLine(x: Int, y0: Int, y1: Int, color: (Short, Short, Short)) {
+    def hori_line(x: Int, y0: Int, y1: Int, color: (Short, Short, Short)) {
         for (i <- y0 to y1)
           this(x, i) = color
     }
@@ -37,13 +37,13 @@ package object Render {
     def render(map: Map, units: Set[Unit]) {
         val canvas = new Canvas(canvas_size)
         val grid_size = (canvas_size - 2 * margin_size) / map.size
-        val mapToCanvas = (m: (Int, Int)) => {
+        val map_to_canvas = (m: (Int, Int)) => {
             val f = (x: Int) => margin_size + x * grid_size
             (f(m._1), f(m._2))
         }
         for (i <- margin_size to (canvas_size - margin_size) by grid_size) {
-            canvas.vertLine(margin_size, canvas_size - margin_size, i, gridline_color)
-            canvas.horiLine(i, margin_size, canvas_size - margin_size, gridline_color)
+            canvas.vert_line(margin_size, canvas_size - margin_size, i, gridline_color)
+            canvas.hori_line(i, margin_size, canvas_size - margin_size, gridline_color)
         }
 
     }
