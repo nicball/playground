@@ -14,7 +14,7 @@ case class UnitAttribute(
 )
 
 class Unit(
-    val position: Map#Coord,
+    val position: Coord,
     val attribute: UnitAttribute,
     val state: UnitAttribute
 ) {
@@ -27,8 +27,9 @@ class Unit(
             hitPoint = state.hitPoint - damage
         )
     )
+    def canAttack = state.attackPoint > 0
     def dead = state.hitPoint <= 0
-    def move(dir: Direction.Value) = {
+    def move(dir: Direction.Value) {
         val target = position move dir
         if (state.movePoint < 1) throw new InvalidMove
         if (target movableFrom position)
