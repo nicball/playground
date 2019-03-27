@@ -11,9 +11,9 @@ import Model
 data Message
     = Join String
     | JoinResp Bool
-    | GameStart
+    | GameStart Side [String]
     | Command Command
-    | FullUpdate [(Coord, Side)] (Maybe Coord)
+    | FullUpdate [(Coord, Side)] Coord
     | Poll
     | Bye
     deriving (Show, Generic)

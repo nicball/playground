@@ -40,7 +40,7 @@ startServer port = do
                     else return (wr', (True, Nothing))
         logLn $ "Player " ++ name ++
             if joined then " has joined in."
-            else "failed to login."
+            else " failed to login."
         serialize conn (JoinResp joined)
         case complete of
             Just wr -> void . forkFinally (startRoom (fst <$> wr)) $
@@ -56,7 +56,7 @@ startRoom sessions = do
     logStr "New game started: "
     logList (Map.keys sessions)
     logStr ".\n"
-    broadcast GameStart
+    sendGameStarts
     gameBoard <- newIORef emptyBoard
     abandoned <- newIORef []
     while (canContinue <$> readIORef abandoned) do
@@ -65,6 +65,9 @@ startRoom sessions = do
             processCmd name conn pid gameBoard abandoned
     broadcast Bye
     where
+    sendGameStarts
+        = forM_ (Map.elems sessions) \(conn, pid) ->
+            serialize conn (GameStart (sideFromInt pid) (Map.keys sessions))
     processCmd name conn pid gameBoard abandoned = do
         logLn $ "Polling " ++ name ++ "."
         serialize conn Poll
@@ -80,7 +83,7 @@ startRoom sessions = do
                         writeIORef gameBoard newBoard
                         broadcast $ FullUpdate
                             (toPieceList newBoard)
-                            (Just coord)
+                            coord
                     Nothing -> processCmd name conn pid gameBoard abandoned
     canContinue abans = Map.size sessions - length abans > 1
     aliveSessions abans = filter (\(_, (_, pid)) -> notElem pid abans) $ Map.assocs sessions

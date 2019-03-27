@@ -1,90 +1,124 @@
+<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
 <style>
-.floating-panel {
-    float: left
+body {
+    min-width: 500px;
+}
+.centre {
+    margin-left: auto;
+    margin-right: auto;
+}
+.float-left {
+    float: left;
 }
 #canvas {
     width: 60vmin;
     height: 60vmin;
 }
+#game-window {
+    display: none;
+}
+#waiting-window {
+    display: none;
+}
+#game-info {
+    font-size: 20px;
+    min-height: 50px;
+}
+#names {
+    font-size: 14px;
+}
+.login-window {
+    margin: auto auto auto auto;
+}
+.login-button {
+    text-align: center;
+}
 </style>
 </head>
+
 <body>
-<form>
-    <input id="user-name-input" type="text" />
-    <input type="button" onclick="clickLogin()" value="登录" />
-</form>
-<div id="status-line"></div>
-<div>
-    <div id="game-board" class="floating-panel" hidden>
-        <canvas id="canvas" width=1000 height=1000></canvas>
-        <form>
-            <input type="button" onclick="clickPass()" value="让" />
-            <input type="button" onclick="clickAbandon()" value="负" />
-        </form>
-    </div>
+<div id="login-window" class="centre">
+    <form>
+        <div>
+            <label for="user-name-input">ID: </label>
+            <input id="user-name-input" type="text" /> 
+            <span id=user-name-warning"></span>
+        </div>
+        <input id="login-button" type="button" onclick="clickLogin()" value="开始对战" />
+    </form>
 </div>
+<div id="waiting-window">正在寻找对手。。。</div>
+<div id="game-window" class="centre">
+    <div id="game-info" class="centre">
+        <div id="player-name" class="float-left names"></div>
+        <div id="player-point" class="float-left scores"></div>
+        <div class="float-left">:</div>
+        <div id="opponent-point" class="float-left scores"></div>
+        <div id="opponent-name" class="float-left names"></div>
+    </div>
+    <div><canvas id="canvas" width=1000 height=1000></canvas></div>
+    <form id="game-actions" class="centre">
+        <input type="button" onclick="clickPass()" value="让" />
+        <input type="button" onclick="clickAbandon()" value="负" />
+    </form>
+    <div id="status-line"></div>
+</div>
+
 <script>
-function setStatusLine(str) {
-    document.getElementById("status-line").innerHTML = str;
-}
-let beingPolled, loggedIn, lastBoard, lastPiece, gameOver, websock;
-function init() {
-    beingPolled = loggedIn = gameOver = false;
-    lastBoard = [];
-    lastPiece = false;
-    drawCanvas();
-    websock = new WebSocket("ws://149.28.136.247:8081");
+let mySide, myName, allNames;
+let gameOver = false;
+let polling = false;
+
+function clickLogin() {
+    //websock = new WebSocket("ws://go.nicball.me:8081");
+    myName = document.getElementById("user-name-input").value;
+    websock = new WebSocket("ws://127.0.0.1:8081");
+    websock.addEventListener("open", (ev) => {
+        websock.send(JSON.stringify({
+            tag: "Join",
+            contents: myName
+        }));
+    });
     websock.addEventListener("message", (ev) => processServerMsg(ev.data));
     websock.addEventListener("close", (ev) => {
-        if (!gameOver) setStatusLine("链接丢失");
+        if (!gameOver) alert("链接丢失");
     });
 }
-document.getElementById('canvas').addEventListener("click", (ev) =>
-    clickCanvas(ev.offsetX, ev.offsetY));
-function clickLogin() {
-    if (!loggedIn) {
-        init();
-        websock.addEventListener("open", (ev) => {
-            websock.send(JSON.stringify({
-                tag: "Join",
-                contents: document.getElementById("user-name-input").value
-            }));
-            document.getElementById('game-board').hidden = false;
-        });
-    }
-    else {
-        setStatusLine("不能重复登录！");
-    }
-}
+
 function processServerMsg(msg) {
     let cmd = JSON.parse(msg);
     switch (cmd.tag) {
     case "JoinResp":
         if (cmd.contents) {
-            loggedIn = true;
-            setStatusLine("已登入，正在搜索对手。。。");
+            document.getElementById('login-window').style.display = 'none';
+            document.getElementById('waiting-window').style.display = 'block';
         }
         else {
-            setStatusLine("用户名已被占用");
+            document.getElementById('user-name-warning').innerHTML = "用户名已被占用";
         }
         break;
     case "GameStart":
-        setStatusLine("游戏开始，别人的回合");
+        document.getElementById('waiting-window').style.display = 'none';
+        document.getElementById('game-window').style.display = 'block';
+        mySide = cmd.contents[0];
+        allNames = cmd.contents[1];
+        showGameInfo([]);
+        opponentsTurn();
+        drawBoard();
         break;
     case "FullUpdate":
-        lastBoard = cmd.contents[0];
-        lastPiece = cmd.contents[1];
-        drawCanvas();
+        drawCanvas(cmd.contents[0], cmd.contents[1]);
+        showGameInfo(cmd.contents[0]);
         break;
     case "Poll":
-        beingPolled = true;
-        setStatusLine("你的回合");
+        myTurn();
+        polling = true;
         break;
     case "Bye":
-        setStatusLine("对局结束");
+        document.getElementById('game-actions').style.display = 'none';
         gameOver = true;
         break;
     default:
@@ -92,13 +126,70 @@ function processServerMsg(msg) {
     }
 }
 
-function drawCanvas() {
+function showGameInfo(pieces) {
+    let oppoName = allNames.filter(name => name !== myName)[0];
+    let myPoint = pieces.filter(([_, side]) => side === mySide).length;
+    let oppoPoint = pieces.length - myPoint;
+    document.getElementById('player-name').innerHTML = myName;
+    document.getElementById('player-point').innerHTML = myPoint.toString();
+    document.getElementById('opponent-name').innerHTML = oppoName;
+    document.getElementById('opponent-point').innerHTML = oppoPoint.toString();
+}
+function myTurn() {
+    document.getElementById('player-name').style.color = sideToColor(mySide);
+    document.getElementById('opponent-name').style.color = 'black';
+}
+function opponentsTurn() {
+    console.log(mySide);
+    document.getElementById('opponent-name').style.color =
+        sideToColor(oppositeSide(mySide));
+    document.getElementById('player-name').style.color = 'black';
+}
+
+document.getElementById('canvas').addEventListener("click", (ev) =>
+    clickCanvas(ev.offsetX, ev.offsetY));
+function clickCanvas(x, y) {
+    if (!gameOver && polling) {
+        let coord = offsetToCoord([x, y]);
+        websock.send(JSON.stringify({
+            tag: "Command",
+            contents: {
+                tag: "Move",
+                contents: coord
+            }
+        }));
+        polling = false;
+        opponentsTurn();
+    }
+}
+function clickPass() {
+    if (polling) {
+        websock.send(JSON.stringify({
+            tag: "Command",
+            contents: { tag: "Pass" }
+        }));
+        polling = false;
+        opponentsTurn();
+    }
+}
+function clickAbandon() {
+    if (polling) {
+        websock.send(JSON.stringify({
+            tag: "Command",
+            contents: { tag: "Abandon" }
+        }));
+        polling = false;
+        opponentsTurn();
+    }
+}
+
+function drawCanvas(board, lastPiece) {
     clearCanvas();
     drawBoard();
-    for (let piece of lastBoard) {
+    for (let piece of board) {
         drawPiece(piece);
     }
-    drawPointer();
+    drawPointer(lastPiece);
 }
 
 const boardSize = 9;
@@ -149,59 +240,30 @@ function drawPiece([coord, side]) {
         0, 2 * Math.PI);
     ctx.fill();
 }
-function drawPointer() {
-    if (lastPiece) {
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const canvasCoord = coordToCanvas(lastPiece);
-        const size = blockSize / 4;
-        ctx.fillStyle = 'blue';
-        ctx.beginPath();
-        ctx.moveTo(canvasCoord[0], canvasCoord[1]);
-        ctx.lineTo(canvasCoord[0] + size, canvasCoord[1]);
-        ctx.lineTo(canvasCoord[0], canvasCoord[1] + size);
-        ctx.closePath();
-        ctx.fill();
-    }
-}
-function clickCanvas(x, y) {
-    if (beingPolled) {
-        let coord = offsetToCoord([x, y]);
-        websock.send(JSON.stringify({
-            tag: "Command",
-            contents: {
-                tag: "Move",
-                contents: coord
-            }
-        }));
-        beingPolled = false;
-        setStatusLine("别人的回合");
-    }
-}
-function clickPass() {
-    if (beingPolled) {
-        websock.send(JSON.stringify({
-            tag: "Command",
-            contents: { tag: "Pass" }
-        }));
-        beingPolled = false;
-        setStatusLine("别人的回合");
-    }
-}
-function clickAbandon() {
-    if (beingPolled) {
-        websock.send(JSON.stringify({
-            tag: "Command",
-            contents: { tag: "Abandon" }
-        }));
-        beingPolled = false;
-        setStatusLine("别人的回合");
-    }
+function drawPointer(lastPiece) {
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const canvasCoord = coordToCanvas(lastPiece);
+    const size = blockSize / 4;
+    ctx.fillStyle = 'blue';
+    ctx.beginPath();
+    ctx.moveTo(canvasCoord[0], canvasCoord[1]);
+    ctx.lineTo(canvasCoord[0] + size, canvasCoord[1]);
+    ctx.lineTo(canvasCoord[0], canvasCoord[1] + size);
+    ctx.closePath();
+    ctx.fill();
 }
 function sideToColor(side) {
     switch (side) {
     case "Black": return "red";
     case "White": return "green";
+    default: throw "Fantastic";
+    }
+}
+function oppositeSide(side) {
+    switch (side) {
+    case "Black": return "White";
+    case "White": return "Black";
     default: throw "Fantastic";
     }
 }
