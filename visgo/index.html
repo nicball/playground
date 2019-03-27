@@ -72,7 +72,7 @@ function processServerMsg(msg) {
         }
         break;
     case "GameStart":
-        setStatusLine("游戏开始");
+        setStatusLine("游戏开始，别人的回合");
         break;
     case "FullUpdate":
         lastBoard = cmd.contents[0];
@@ -98,7 +98,7 @@ function drawCanvas() {
     for (let piece of lastBoard) {
         drawPiece(piece);
     }
-    if (lastPiece) drawPointer(lastPiece);
+    drawPointer();
 }
 
 const boardSize = 9;
@@ -149,18 +149,20 @@ function drawPiece([coord, side]) {
         0, 2 * Math.PI);
     ctx.fill();
 }
-function drawPointer(coord) {
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
-    const canvasCoord = coordToCanvas(coord);
-    const size = blockSize / 4;
-    ctx.fillStyle = 'blue';
-    ctx.beginPath();
-    ctx.moveTo(canvasCoord.x, canvasCoord.y);
-    ctx.lineTo(canvasCoord.x + size, canvasCoord.y);
-    ctx.lineTo(canvasCoord.x + size, canvasCoord.y + size);
-    ctx.closePath();
-    ctx.fill();
+function drawPointer() {
+    if (lastPiece) {
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const canvasCoord = coordToCanvas(lastPiece);
+        const size = blockSize / 4;
+        ctx.fillStyle = 'blue';
+        ctx.beginPath();
+        ctx.moveTo(canvasCoord[0], canvasCoord[1]);
+        ctx.lineTo(canvasCoord[0] + size, canvasCoord[1]);
+        ctx.lineTo(canvasCoord[0], canvasCoord[1] + size);
+        ctx.closePath();
+        ctx.fill();
+    }
 }
 function clickCanvas(x, y) {
     if (beingPolled) {
