@@ -1,6 +1,15 @@
 <html>
 <head>
 <meta charset="UTF-8">
+<style>
+.floating-panel {
+    float: left
+}
+#canvas {
+    width: 60vmin;
+    height: 60vmin;
+}
+</style>
 </head>
 <body>
 <form>
@@ -8,38 +17,42 @@
     <input type="button" onclick="clickLogin()" value="登录" />
 </form>
 <div id="status-line"></div>
-<canvas id="canvas" width=400 height=400></canvas>
-<form>
-    <input type="button" onclick="clickPass()" value="让" />
-    <input type="button" onclick="clickAbandon()" value="负" />
-</form>
+<div>
+    <div id="game-board" class="floating-panel" hidden>
+        <canvas id="canvas" width=1000 height=1000></canvas>
+        <form>
+            <input type="button" onclick="clickPass()" value="让" />
+            <input type="button" onclick="clickAbandon()" value="负" />
+        </form>
+    </div>
+</div>
 <script>
 function setStatusLine(str) {
     document.getElementById("status-line").innerHTML = str;
 }
-function newWebSocket() {
-}
-let beingPolled, loggedIn, lastBoard, websock;
-init();
+let beingPolled, loggedIn, lastBoard, gameOver, websock;
 function init() {
-    beingPolled = loggedIn = false;
+    beingPolled = loggedIn = gameOver = false;
     lastBoard = [];
+    drawCanvas();
     websock = new WebSocket("ws://149.28.136.247:8081");
     websock.addEventListener("message", (ev) => processServerMsg(ev.data));
     websock.addEventListener("close", (ev) => {
-        setStatusLine("对局结束");
-        init();
-        drawCanvas();
+        if (!gameOver) setStatusLine("链接丢失");
     });
 }
 document.getElementById('canvas').addEventListener("click", (ev) =>
     clickCanvas(ev.offsetX, ev.offsetY));
 function clickLogin() {
     if (!loggedIn) {
-        websock.send(JSON.stringify({
-            tag: "Join",
-            contents: document.getElementById("user-name-input").value
-        }));
+        init();
+        websock.addEventListener("open", (ev) => {
+            websock.send(JSON.stringify({
+                tag: "Join",
+                contents: document.getElementById("user-name-input").value
+            }));
+            document.getElementById('game-board').hidden = false;
+        });
     }
     else {
         setStatusLine("不能重复登录！");
@@ -65,6 +78,10 @@ function processServerMsg(msg) {
         beingPolled = true;
         setStatusLine("你的回合");
         break;
+    case "Bye":
+        setStatusLine("对局结束");
+        gameOver = true;
+        break;
     default:
         console.log("Unexpected " + msg);
     }
@@ -79,7 +96,7 @@ function drawCanvas() {
 }
 
 const boardSize = 9;
-const canvasSize = 400;
+const canvasSize = 1000;
 const borderSize = 20;
 const blockSize = (canvasSize - 2 * borderSize) / (boardSize - 1);
 function coordToCanvas([x, y]) {

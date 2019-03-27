@@ -14,6 +14,7 @@ data Message
     | Command Command
     | FullUpdate [(Coord, Side)]
     | Poll
+    | Bye
     deriving (Show, Generic)
 
 data Command

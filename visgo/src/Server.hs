@@ -63,6 +63,7 @@ startRoom sessions = do
         abans <- readIORef abandoned
         forM_ (aliveSessions abans) \(name, (conn, pid)) ->
             processCmd name conn pid gameBoard abandoned
+    sendByes
     where
     processCmd name conn pid gameBoard abandoned = do
         logLn $ "Polling " ++ name ++ "."
@@ -81,6 +82,8 @@ startRoom sessions = do
                     Nothing -> processCmd name conn pid gameBoard abandoned
     canContinue abans = Map.size sessions - length abans > 1
     aliveSessions abans = filter (\(_, (_, pid)) -> notElem pid abans) $ Map.assocs sessions
+    sendByes
+        = mapM_ (flip serialize Bye) (fst $ Map.elems sessions)
 
 sendUpdate :: Board -> [Connection] -> IO () 
 sendUpdate board conns
