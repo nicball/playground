@@ -30,10 +30,11 @@
 function setStatusLine(str) {
     document.getElementById("status-line").innerHTML = str;
 }
-let beingPolled, loggedIn, lastBoard, gameOver, websock;
+let beingPolled, loggedIn, lastBoard, lastPiece, gameOver, websock;
 function init() {
     beingPolled = loggedIn = gameOver = false;
     lastBoard = [];
+    lastPiece = false;
     drawCanvas();
     websock = new WebSocket("ws://149.28.136.247:8081");
     websock.addEventListener("message", (ev) => processServerMsg(ev.data));
@@ -74,7 +75,8 @@ function processServerMsg(msg) {
         setStatusLine("游戏开始");
         break;
     case "FullUpdate":
-        lastBoard = cmd.contents;
+        lastBoard = cmd.contents[0];
+        lastPiece = cmd.contents[1];
         drawCanvas();
         break;
     case "Poll":
@@ -96,6 +98,7 @@ function drawCanvas() {
     for (let piece of lastBoard) {
         drawPiece(piece);
     }
+    if (lastPiece) drawPointer(lastPiece);
 }
 
 const boardSize = 9;
@@ -138,12 +141,25 @@ function drawPiece([coord, side]) {
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const canvasCoord = coordToCanvas(coord);
-    ctx.beginPath();
     ctx.fillStyle = sideToColor(side);
+    ctx.beginPath();
     ctx.ellipse(canvasCoord[0], canvasCoord[1],
         blockSize * 3 / 8, blockSize * 3 / 8,
         0,
         0, 2 * Math.PI);
+    ctx.fill();
+}
+function drawPointer(coord) {
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const canvasCoord = coordToCanvas(coord);
+    const size = blockSize / 4;
+    ctx.fillStyle = 'blue';
+    ctx.beginPath();
+    ctx.moveTo(canvasCoord.x, canvasCoord.y);
+    ctx.lineTo(canvasCoord.x + size, canvasCoord.y);
+    ctx.lineTo(canvasCoord.x + size, canvasCoord.y + size);
+    ctx.closePath();
     ctx.fill();
 }
 function clickCanvas(x, y) {

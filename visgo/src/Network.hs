@@ -13,7 +13,7 @@ data Message
     | JoinResp Bool
     | GameStart
     | Command Command
-    | FullUpdate [(Coord, Side)]
+    | FullUpdate [(Coord, Side)] (Maybe Coord)
     | Poll
     | Bye
     deriving (Show, Generic)
