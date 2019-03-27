@@ -84,7 +84,7 @@ startRoom sessions = do
     canContinue abans = Map.size sessions - length abans > 1
     aliveSessions abans = filter (\(_, (_, pid)) -> notElem pid abans) $ Map.assocs sessions
     broadcast msg
-        = mapM_ (flip serialize msg) (fst $ Map.elems sessions)
+        = mapM_ (flip serialize msg) (fst <$> Map.elems sessions)
 
 sendUpdate :: Board -> [Connection] -> IO () 
 sendUpdate board conns
