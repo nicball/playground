@@ -56,6 +56,7 @@ startRoom sessions = do
     logStr "New game started: "
     logList (Map.keys sessions)
     logStr ".\n"
+    broadcast GameStart
     gameBoard <- newIORef emptyBoard
     abandoned <- newIORef []
     sendUpdate emptyBoard (Map.elems (fst <$> sessions))
@@ -63,7 +64,7 @@ startRoom sessions = do
         abans <- readIORef abandoned
         forM_ (aliveSessions abans) \(name, (conn, pid)) ->
             processCmd name conn pid gameBoard abandoned
-    sendByes
+    broadcast Bye
     where
     processCmd name conn pid gameBoard abandoned = do
         logLn $ "Polling " ++ name ++ "."
@@ -82,8 +83,8 @@ startRoom sessions = do
                     Nothing -> processCmd name conn pid gameBoard abandoned
     canContinue abans = Map.size sessions - length abans > 1
     aliveSessions abans = filter (\(_, (_, pid)) -> notElem pid abans) $ Map.assocs sessions
-    sendByes
-        = mapM_ (flip serialize Bye) (fst $ Map.elems sessions)
+    broadcast msg
+        = mapM_ (flip serialize msg) (fst $ Map.elems sessions)
 
 sendUpdate :: Board -> [Connection] -> IO () 
 sendUpdate board conns

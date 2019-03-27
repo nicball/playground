@@ -11,6 +11,7 @@ import Model
 data Message
     = Join String
     | JoinResp Bool
+    | GameStart
     | Command Command
     | FullUpdate [(Coord, Side)]
     | Poll

@@ -70,6 +70,9 @@ function processServerMsg(msg) {
             setStatusLine("用户名已被占用");
         }
         break;
+    case "GameStart":
+        setStatusLine("游戏开始");
+        break;
     case "FullUpdate":
         lastBoard = cmd.contents;
         drawCanvas();
@@ -97,15 +100,17 @@ function drawCanvas() {
 
 const boardSize = 9;
 const canvasSize = 1000;
-const borderSize = 20;
+const borderSize = 50;
 const blockSize = (canvasSize - 2 * borderSize) / (boardSize - 1);
 function coordToCanvas([x, y]) {
     return [x * blockSize + borderSize,
             canvasSize - (y * blockSize + borderSize)];
 }
-function canvasToCoord([x, y]) {
-    return [Math.round((x - borderSize) / blockSize),
-            Math.round(((canvasSize - y) - borderSize) / blockSize)];
+function offsetToCoord([x, y]) {
+    const xFactor = canvasSize / canvas.offsetWidth;
+    const yFactor = canvasSize / canvas.offsetHeight;
+    return [Math.round((x * xFactor - borderSize) / blockSize),
+            Math.round(((canvasSize - y * yFactor) - borderSize) / blockSize)];
 }
 function clearCanvas() {
     const canvas = document.getElementById('canvas');
@@ -143,7 +148,7 @@ function drawPiece([coord, side]) {
 }
 function clickCanvas(x, y) {
     if (beingPolled) {
-        let coord = canvasToCoord([x, y]);
+        let coord = offsetToCoord([x, y]);
         websock.send(JSON.stringify({
             tag: "Command",
             contents: {
