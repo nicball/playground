@@ -73,9 +73,9 @@ let gameOver = false;
 let polling = false;
 
 function clickLogin() {
-    //websock = new WebSocket("ws://go.nicball.me:8081");
     myName = document.getElementById("user-name-input").value;
-    websock = new WebSocket("ws://127.0.0.1:8081");
+    websock = new WebSocket("ws://go.nicball.me:8081");
+    //websock = new WebSocket("ws://127.0.0.1:8081");
     websock.addEventListener("open", (ev) => {
         websock.send(JSON.stringify({
             tag: "Join",
