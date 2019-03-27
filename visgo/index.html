@@ -1,0 +1,170 @@
+<html>
+<head>
+<meta charset="UTF-8">
+</head>
+<body>
+<form>
+    <input id="user-name-input" type="text" />
+    <input type="button" onclick="clickLogin()" value="登录" />
+</form>
+<div id="status-line"></div>
+<canvas id="canvas" width=400 height=400></canvas>
+<form>
+    <input type="button" onclick="clickPass()" value="让" />
+    <input type="button" onclick="clickAbandon()" value="负" />
+</form>
+<script>
+function setStatusLine(str) {
+    document.getElementById("status-line").innerHTML = str;
+}
+function newWebSocket() {
+}
+let beingPolled, loggedIn, lastBoard, websock;
+init();
+function init() {
+    beingPolled = loggedIn = false;
+    lastBoard = [];
+    websock = new WebSocket("ws://149.28.136.247:8081");
+    websock.addEventListener("message", (ev) => processServerMsg(ev.data));
+    websock.addEventListener("close", (ev) => {
+        setStatusLine("对局结束");
+        init();
+        drawCanvas();
+    });
+}
+document.getElementById('canvas').addEventListener("click", (ev) =>
+    clickCanvas(ev.offsetX, ev.offsetY));
+function clickLogin() {
+    if (!loggedIn) {
+        websock.send(JSON.stringify({
+            tag: "Join",
+            contents: document.getElementById("user-name-input").value
+        }));
+    }
+    else {
+        setStatusLine("不能重复登录！");
+    }
+}
+function processServerMsg(msg) {
+    let cmd = JSON.parse(msg);
+    switch (cmd.tag) {
+    case "JoinResp":
+        if (cmd.contents) {
+            loggedIn = true;
+            setStatusLine("已登入，正在搜索对手。。。");
+        }
+        else {
+            setStatusLine("用户名已被占用");
+        }
+        break;
+    case "FullUpdate":
+        lastBoard = cmd.contents;
+        drawCanvas();
+        break;
+    case "Poll":
+        beingPolled = true;
+        setStatusLine("你的回合");
+        break;
+    default:
+        console.log("Unexpected " + msg);
+    }
+}
+
+function drawCanvas() {
+    clearCanvas();
+    drawBoard();
+    for (let piece of lastBoard) {
+        drawPiece(piece);
+    }
+}
+
+const boardSize = 9;
+const canvasSize = 400;
+const borderSize = 20;
+const blockSize = (canvasSize - 2 * borderSize) / (boardSize - 1);
+function coordToCanvas([x, y]) {
+    return [x * blockSize + borderSize,
+            canvasSize - (y * blockSize + borderSize)];
+}
+function canvasToCoord([x, y]) {
+    return [Math.round((x - borderSize) / blockSize),
+            Math.round(((canvasSize - y) - borderSize) / blockSize)];
+}
+function clearCanvas() {
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+function drawBoard() {
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    for (let x = 0; x < boardSize; ++x) {
+        let [x1, y1] = coordToCanvas([x, 0]);
+        let [x2, y2] = coordToCanvas([x, boardSize - 1]);
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+    }
+    for (let y = 0; y < boardSize; ++y) {
+        let [x1, y1] = coordToCanvas([0, y]);
+        let [x2, y2] = coordToCanvas([boardSize - 1, y]);
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+    }
+    ctx.stroke();
+}
+function drawPiece([coord, side]) {
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const canvasCoord = coordToCanvas(coord);
+    ctx.beginPath();
+    ctx.fillStyle = sideToColor(side);
+    ctx.ellipse(canvasCoord[0], canvasCoord[1],
+        blockSize * 3 / 8, blockSize * 3 / 8,
+        0,
+        0, 2 * Math.PI);
+    ctx.fill();
+}
+function clickCanvas(x, y) {
+    if (beingPolled) {
+        let coord = canvasToCoord([x, y]);
+        websock.send(JSON.stringify({
+            tag: "Command",
+            contents: {
+                tag: "Move",
+                contents: coord
+            }
+        }));
+        beingPolled = false;
+        setStatusLine("别人的回合");
+    }
+}
+function clickPass() {
+    if (beingPolled) {
+        websock.send(JSON.stringify({
+            tag: "Command",
+            contents: { tag: "Pass" }
+        }));
+        beingPolled = false;
+        setStatusLine("别人的回合");
+    }
+}
+function clickAbandon() {
+    if (beingPolled) {
+        websock.send(JSON.stringify({
+            tag: "Command",
+            contents: { tag: "Abandon" }
+        }));
+        beingPolled = false;
+        setStatusLine("别人的回合");
+    }
+}
+function sideToColor(side) {
+    switch (side) {
+    case "Black": return "red";
+    case "White": return "green";
+    default: throw "Fantastic";
+    }
+}
+</script>
+</body>
+</html>

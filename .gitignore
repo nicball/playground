@@ -20,25 +20,25 @@
 *.out
 *.app
 
-learn/dist
-learn/dist-*
-learn/cabal-dev
-learn/*.o
-learn/*.hi
-learn/*.chi
-learn/*.chs.h
-learn/*.dyn_o
-learn/*.dyn_hi
-learn/.hpc
-learn/.hsenv
-learn/.cabal-sandbox/
-learn/cabal.sandbox.config
-learn/*.prof
-learn/*.aux
-learn/*.hp
-learn/*.eventlog
-learn/.stack-work/
-learn/cabal.project.local
+dist
+dist-*
+cabal-dev
+*.o
+*.hi
+*.chi
+*.chs.h
+*.dyn_o
+*.dyn_hi
+.hpc
+.hsenv
+.cabal-sandbox/
+cabal.sandbox.config
+*.prof
+*.aux
+*.hp
+*.eventlog
+.stack-work/
+cabal.project.local
 
 .vscode/*
 
