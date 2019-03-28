@@ -6,7 +6,7 @@ import GHC.Generics (Generic)
 type Coord = (Int, Int)
 
 boardSize :: Int
-boardSize = 9
+boardSize = 13
 
 visionRange :: Double
 visionRange = 1.5

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+<title>GO!</title>
 <meta charset="UTF-8">
 <style>
 body {
@@ -94,8 +95,8 @@ function clickLogin() {
         loggingIn = true;
         myName = document.getElementById("user-name-input").value;
         document.getElementById('user-name-warning').innerHTML = "";
-        //websock = new WebSocket("ws://go.nicball.me:8081");
-        websock = new WebSocket("ws://127.0.0.1:8081");
+        websock = new WebSocket("ws://go.nicball.me:8081");
+        //websock = new WebSocket("ws://127.0.0.1:8081");
         websock.addEventListener("open", (ev) => {
             websock.send(JSON.stringify({
                 tag: "Join",
@@ -134,7 +135,6 @@ function processServerMsg(msg) {
         alert('对局开始');
         break;
     case "FullUpdate":
-        console.log(cmd);
         drawCanvas(cmd.contents[2], cmd.contents[1]);
         showGameInfo(cmd.contents[0]);
         break;
@@ -222,7 +222,7 @@ function drawCanvas(visibles, lastPiece) {
     }
 }
 
-const boardSize = 9;
+const boardSize = 13;
 const canvasSize = 1000;
 const borderSize = 50;
 const blockSize = (canvasSize - 2 * borderSize) / (boardSize - 1);
@@ -257,6 +257,16 @@ function drawBoard() {
         ctx.lineTo(x2, y2);
     }
     ctx.stroke();
+    const anchors = [3, 6, 9];
+    for (let x of anchors) {
+        for (let y of anchors) {
+            const offset = coordToCanvas([x, y]);
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            ctx.ellipse(offset[0], offset[1], 5, 5, 0, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+    }
 }
 function drawPiece([coord, side]) {
     const canvas = document.getElementById('canvas');
