@@ -130,6 +130,7 @@ function processServerMsg(msg) {
         showGameInfo([]);
         opponentsTurn();
         drawBoard();
+        alert('对局开始');
         break;
     case "FullUpdate":
         drawCanvas(cmd.contents[0], cmd.contents[1]);
@@ -143,6 +144,7 @@ function processServerMsg(msg) {
         document.getElementById('game-actions').style.display = 'none';
         gameOver = true;
         document.getElementById('status-line').innerHTML = '对局结束';
+        alert('对局结束');
         break;
     default:
         throw ("Unexpected " + msg);
