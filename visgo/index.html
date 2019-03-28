@@ -4,18 +4,21 @@
 <meta charset="UTF-8">
 <style>
 body {
-    min-width: 500px;
-}
-.centre {
+    min-width: 640px;
+    width: 60%;
     margin-left: auto;
     margin-right: auto;
 }
-.float-left {
-    float: left;
+.window {
+    width: 98%;
+    margin-left: 1%;
+    margin-right: 1%;
+    text-align: center;
 }
-#canvas {
-    width: 60vmin;
-    height: 60vmin;
+.panel {
+    width: 90%;
+    margin-left: 5%;
+    margin-right: 5%;
 }
 #game-window {
     display: none;
@@ -24,43 +27,55 @@ body {
     display: none;
 }
 #game-info {
-    font-size: 20px;
-    min-height: 50px;
+    font-size: 32px;
 }
-#names {
-    font-size: 14px;
+.name-tags {
+    float: left;
+    width: 23%;
+    font-size: 16px;
+    margin-left: 1%;
+    margin-right: 1%;
 }
-.login-window {
-    margin: auto auto auto auto;
+.scores {
+    float: left;
+    width: 18%;
+    margin-left: 1%;
+    margin-right: 1%;
 }
-.login-button {
+#game-info-sep {
+    float: left;
+    width: 8%;
+    margin-left: 1%;
+    margin-right: 1%;
+}
+#login-button {
     text-align: center;
 }
 </style>
 </head>
 
 <body>
-<div id="login-window" class="centre">
+<div id="login-window" class="window">
     <form>
         <div>
             <label for="user-name-input">ID: </label>
             <input id="user-name-input" type="text" /> 
-            <span id=user-name-warning"></span>
+            <span id="user-name-warning"></span>
         </div>
         <input id="login-button" type="button" onclick="clickLogin()" value="开始对战" />
     </form>
 </div>
-<div id="waiting-window">正在寻找对手。。。</div>
-<div id="game-window" class="centre">
-    <div id="game-info" class="centre">
-        <div id="player-name" class="float-left names"></div>
-        <div id="player-point" class="float-left scores"></div>
-        <div class="float-left">:</div>
-        <div id="opponent-point" class="float-left scores"></div>
-        <div id="opponent-name" class="float-left names"></div>
+<div id="waiting-window" class="window">正在寻找对手。。。</div>
+<div id="game-window" class="window">
+    <div id="game-info" class="panel">
+        <div id="player-name" class="name-tags"></div>
+        <div id="player-point" class="scores"></div>
+        <div id="game-info-sep">:</div>
+        <div id="opponent-point" class="scores"></div>
+        <div id="opponent-name" class="name-tags"></div>
     </div>
-    <div><canvas id="canvas" width=1000 height=1000></canvas></div>
-    <form id="game-actions" class="centre">
+    <canvas id="canvas" width=1000 height=1000 class="panel"></canvas>
+    <form id="game-actions" class="panel">
         <input type="button" onclick="clickPass()" value="让" />
         <input type="button" onclick="clickAbandon()" value="负" />
     </form>
@@ -71,21 +86,27 @@ body {
 let mySide, myName, allNames;
 let gameOver = false;
 let polling = false;
+let loggingIn = false;
 
 function clickLogin() {
-    myName = document.getElementById("user-name-input").value;
-    websock = new WebSocket("ws://go.nicball.me:8081");
-    //websock = new WebSocket("ws://127.0.0.1:8081");
-    websock.addEventListener("open", (ev) => {
-        websock.send(JSON.stringify({
-            tag: "Join",
-            contents: myName
-        }));
-    });
-    websock.addEventListener("message", (ev) => processServerMsg(ev.data));
-    websock.addEventListener("close", (ev) => {
-        if (!gameOver) alert("链接丢失");
-    });
+    if (!loggingIn) {
+        loggingIn = true;
+        myName = document.getElementById("user-name-input").value;
+        document.getElementById('user-name-warning').innerHTML = "";
+        websock = new WebSocket("ws://go.nicball.me:8081");
+        //websock = new WebSocket("ws://127.0.0.1:8081");
+        websock.addEventListener("open", (ev) => {
+            websock.send(JSON.stringify({
+                tag: "Join",
+                contents: myName
+            }));
+        });
+        websock.addEventListener("message", (ev) => processServerMsg(ev.data));
+        websock.addEventListener("close", (ev) => {
+            if (!gameOver && !loggingIn) alert("链接丢失");
+            if (loggingIn) logginIn = false;
+        });
+    }
 }
 
 function processServerMsg(msg) {
@@ -122,7 +143,7 @@ function processServerMsg(msg) {
         gameOver = true;
         break;
     default:
-        console.log("Unexpected " + msg);
+        throw ("Unexpected " + msg);
     }
 }
 
@@ -140,7 +161,6 @@ function myTurn() {
     document.getElementById('opponent-name').style.color = 'black';
 }
 function opponentsTurn() {
-    console.log(mySide);
     document.getElementById('opponent-name').style.color =
         sideToColor(oppositeSide(mySide));
     document.getElementById('player-name').style.color = 'black';
