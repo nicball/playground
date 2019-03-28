@@ -142,6 +142,7 @@ function processServerMsg(msg) {
     case "Bye":
         document.getElementById('game-actions').style.display = 'none';
         gameOver = true;
+        document.getElementById('status-line').innerHTML = '对局结束';
         break;
     default:
         throw ("Unexpected " + msg);
