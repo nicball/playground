@@ -117,6 +117,7 @@ function processServerMsg(msg) {
         if (cmd.contents) {
             document.getElementById('login-window').style.display = 'none';
             document.getElementById('waiting-window').style.display = 'block';
+            loggingIn = false;
         }
         else {
             document.getElementById('user-name-warning').innerHTML = "用户名已被占用";
