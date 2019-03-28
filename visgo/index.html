@@ -89,6 +89,8 @@ let mySide, myName, allNames;
 let gameOver = false;
 let polling = false;
 let loggingIn = false;
+let lastBoard = [];
+let lastPiece = false;
 
 function clickLogin() {
     if (!loggingIn) {
@@ -135,6 +137,8 @@ function processServerMsg(msg) {
         alert('对局开始');
         break;
     case "FullUpdate":
+        lastBoard = cmd.contents[0];
+        lastPiece = cmd.contents[1];
         drawCanvas(cmd.contents[2], cmd.contents[1]);
         showGameInfo(cmd.contents[0]);
         break;
@@ -146,6 +150,7 @@ function processServerMsg(msg) {
         document.getElementById('game-actions').style.display = 'none';
         gameOver = true;
         document.getElementById('status-line').innerHTML = '对局结束';
+        drawCanvas(lastBoard, lastPiece);
         alert('对局结束');
         break;
     default:
@@ -215,7 +220,7 @@ function drawCanvas(visibles, lastPiece) {
     for (let piece of visibles) {
         drawPiece(piece);
     }
-    if (visibles.find(([coord]) =>
+    if (lastPiece && visibles.find(([coord]) =>
         coord[0] === lastPiece[0] &&
         coord[1] === lastPiece[1])) {
         drawPointer(lastPiece);
