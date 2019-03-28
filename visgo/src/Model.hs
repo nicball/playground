@@ -8,6 +8,9 @@ type Coord = (Int, Int)
 boardSize :: Int
 boardSize = 9
 
+visionRange :: Double
+visionRange = 1.5
+
 validCoord :: Coord -> Bool
 validCoord (x, y)
     = inRange x && inRange y where
@@ -30,6 +33,16 @@ isCenter (x, y)
     = p x && p y where
     p c = c >= 1 && c < boardSize - 1
 
+distance :: Coord -> Coord -> Double
+distance a b
+    = sqrt (sq (x1 - x2) + sq (y1 - y2)) where
+    (x1, y1, x2, y2)
+        = ( fromIntegral (fst a)
+          , fromIntegral (snd a)
+          , fromIntegral (fst b)
+          , fromIntegral (snd b)
+          )
+    sq x = x * x
 
 type Board = [PieceGroup]
 
@@ -59,6 +72,19 @@ isAdjToGroup :: Coord -> PieceGroup -> Bool
 isAdjToGroup c pg
     = any (isAdjacent c) (members pg)
 
+isVisibleToGroup:: Coord -> PieceGroup -> Bool
+isVisibleToGroup c pg
+    = any ((<= visionRange) . distance c) (members pg)
+
+isVisibleToSide :: Board -> Side -> Coord -> Bool
+isVisibleToSide pgs mySide coord
+    = any
+        (\pg ->
+            if groupSide pg == mySide
+                then isVisibleToGroup coord pg
+                else False)
+        pgs
+
 adjacents :: Coord -> [Coord]
 adjacents (x, y)
     = up ++ down ++ left ++ right where
@@ -73,23 +99,41 @@ isOccupied board coord
 
 groupLives :: Board -> PieceGroup -> Int
 groupLives board (PieceGroup mems side)
-    = length . group . sort . filter (not . isOccupied board) . concatMap adjacents $ mems
+    = length . group . sort
+        . filter (not . isOccupied board)
+        . concatMap adjacents
+        $ mems
 
 addPiece :: Board -> Side -> Coord -> Maybe Board
 addPiece board side coord
     = if isOccupied board coord
-    then Nothing
-    else if groupLives (newGroup : newRest) newGroup == 0
-    then Nothing
-    else Just (newGroup : newRest) where
-    (adjs, rest) = partition
-        (both (isAdjToGroup coord) ((== side) . groupSide))
-        board
+        then
+            (if not $ isVisibleToSide board side coord
+                then Just board
+                else Nothing)
+        else
+            if groupLives (newGroup : newRest) newGroup == 0
+                then Nothing
+                else Just (newGroup : newRest) where
+    (adjs, rest)
+        = partition
+            (both (isAdjToGroup coord) ((== side) . groupSide))
+            board
     newGroup
         = if null adjs
-        then PieceGroup [coord] side
-        else PieceGroup ([coord] ++ concatMap members adjs) side
+            then PieceGroup [coord] side
+            else PieceGroup ([coord] ++ concatMap members adjs) side
     newRest = filter ((/= 0) . groupLives (newGroup : rest)) rest
+
+visiblePieces :: Board -> Side -> [(Coord, Side)]
+visiblePieces pgs mySide
+    = concatMap f pgs where
+    f (PieceGroup pieces side)
+        = map
+            (\c -> (c, side))
+            (if side == mySide
+                then pieces
+                else filter (isVisibleToSide pgs mySide) pieces)
 
 flipSide :: Side -> Side
 flipSide Black = White
