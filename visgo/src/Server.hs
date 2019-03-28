@@ -63,7 +63,7 @@ startRoom sessions = do
         abans <- readIORef abandoned
         forM_ (aliveSessions abans) \(name, (conn, pid)) ->
             processCmd name conn pid gameBoard abandoned
-    broadcast Bye
+    broadcast (const Bye)
     where
     sendGameStarts
         = forM_ (Map.elems sessions) \(conn, pid) ->
@@ -81,14 +81,17 @@ startRoom sessions = do
                 case addPiece oldBoard (sideFromInt pid) coord of
                     Just newBoard -> do
                         writeIORef gameBoard newBoard
-                        broadcast $ FullUpdate
-                            (toPieceList newBoard)
-                            coord
+                        broadcast $ \pid ->
+                            FullUpdate
+                                (toPieceList newBoard)
+                                coord
+                                (visiblePieces newBoard (sideFromInt pid))
                     Nothing -> processCmd name conn pid gameBoard abandoned
     canContinue abans = Map.size sessions - length abans > 1
     aliveSessions abans = filter (\(_, (_, pid)) -> notElem pid abans) $ Map.assocs sessions
-    broadcast msg
-        = mapM_ (flip serialize msg) (map fst (Map.elems sessions))
+    broadcast f
+        = forM_ (Map.elems sessions) \(conn, pid) ->
+            serialize conn (f pid)
     toPieceList board
         = concatMap fromPg board
     fromPg (PieceGroup mems side)

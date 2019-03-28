@@ -94,8 +94,8 @@ function clickLogin() {
         loggingIn = true;
         myName = document.getElementById("user-name-input").value;
         document.getElementById('user-name-warning').innerHTML = "";
-        websock = new WebSocket("ws://go.nicball.me:8081");
-        //websock = new WebSocket("ws://127.0.0.1:8081");
+        //websock = new WebSocket("ws://go.nicball.me:8081");
+        websock = new WebSocket("ws://127.0.0.1:8081");
         websock.addEventListener("open", (ev) => {
             websock.send(JSON.stringify({
                 tag: "Join",
@@ -134,7 +134,8 @@ function processServerMsg(msg) {
         alert('对局开始');
         break;
     case "FullUpdate":
-        drawCanvas(cmd.contents[0], cmd.contents[1]);
+        console.log(cmd);
+        drawCanvas(cmd.contents[2], cmd.contents[1]);
         showGameInfo(cmd.contents[0]);
         break;
     case "Poll":
@@ -208,13 +209,17 @@ function clickAbandon() {
     }
 }
 
-function drawCanvas(board, lastPiece) {
+function drawCanvas(visibles, lastPiece) {
     clearCanvas();
     drawBoard();
-    for (let piece of board) {
+    for (let piece of visibles) {
         drawPiece(piece);
     }
-    drawPointer(lastPiece);
+    if (visibles.find(([coord]) =>
+        coord[0] === lastPiece[0] &&
+        coord[1] === lastPiece[1])) {
+        drawPointer(lastPiece);
+    }
 }
 
 const boardSize = 9;

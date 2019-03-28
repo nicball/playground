@@ -79,11 +79,8 @@ isVisibleToGroup c pg
 isVisibleToSide :: Board -> Side -> Coord -> Bool
 isVisibleToSide pgs mySide coord
     = any
-        (\pg ->
-            if groupSide pg == mySide
-                then isVisibleToGroup coord pg
-                else False)
-        pgs
+        (isVisibleToGroup coord)
+        (filter ((== mySide) . groupSide) pgs)
 
 adjacents :: Coord -> [Coord]
 adjacents (x, y)
