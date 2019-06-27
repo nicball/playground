@@ -40,7 +40,7 @@ cabal.sandbox.config
 .stack-work/
 cabal.project.local
 
-.vscode/*
+.vscode/
 
 # scala
 target/
