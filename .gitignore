@@ -45,3 +45,5 @@ cabal.project.local
 # scala
 target/
 *.class
+*.class
+*.log
