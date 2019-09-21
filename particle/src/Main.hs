@@ -1,7 +1,6 @@
 module Main where
 
 import Control.Exception
-import Control.Exception.Assert
 import Control.Monad
 import Data.Function
 import Data.IORef
