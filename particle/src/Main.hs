@@ -22,32 +22,55 @@ main =
     withWindow 1280 720 "particles" \win ->
     withDrawer initPos initVel \drawer -> do
         viewFactor <- newIORef (0.01 :: GLfloat)
+        viewOffset <- newIORef (Vector2 (0 :: GLfloat) 0)
+        disturbPos <- newIORef (Vector2 (0 :: GLfloat) 0)
+        disturbEna <- newIORef (0 :: GLint)
         clearColor $= Color4 0 0 0 0
-        setMouseButtonCallback win (Just (onMouse viewFactor))
-        fix $ \f -> do
+        setMouseButtonCallback win (Just (onMouse viewFactor viewOffset disturbPos disturbEna))
+        fix $ \loop -> do
             clear [ColorBuffer]
-            readIORef viewFactor >>= draw drawer
-            step drawer
+            vf <- readIORef viewFactor
+            vo <- readIORef viewOffset
+            dp <- readIORef disturbPos
+            de <- readIORef disturbEna
+            draw drawer vf vo
+            step drawer dp de vf
             swap drawer
             swapBuffers win
             pollEvents
             closep <- windowShouldClose win
             if closep 
             then putStrLn "exiting"
-            else f
+            else loop
 
-onMouse :: IORef GLfloat -> Window -> MouseButton -> MouseButtonState -> ModifierKeys -> IO ()
-onMouse viewFactor win button state mod = do
+onMouse :: IORef GLfloat -> IORef (Vector2 GLfloat) -> IORef (Vector2 GLfloat) -> IORef GLint -> Window -> MouseButton -> MouseButtonState -> ModifierKeys -> IO ()
+onMouse viewFactor viewOffset disturbPos disturbEna win button state mod = do
+    (sx, sy) <- r2f <$> getCursorPos win
+    (wid, hei) <- r2f <$> getWindowSize win
+    vf <- readIORef viewFactor
+    Vector2 ox oy <- readIORef viewOffset
+    let dx = (sx / wid * 2 - 1) / vf
+        dy = ((hei - sy) / hei * 2 - 1) / vf
     case (button, state) of
-        (MouseButton'1, MouseButtonState'Pressed) -> modifyIORef viewFactor (* 2)
-        (MouseButton'2, MouseButtonState'Pressed) -> modifyIORef viewFactor (/ 2)
+        (MouseButton'1, MouseButtonState'Pressed) -> do
+            modifyIORef viewFactor (* 2)
+            modifyIORef viewOffset (\(Vector2 x y) -> Vector2 (x + dx / 2) (y + dy / 2))
+        (MouseButton'2, MouseButtonState'Pressed) -> do
+            modifyIORef viewFactor (/ 2)
+            modifyIORef viewOffset (\(Vector2 x y) -> Vector2 (x + dx / 2) (y + dy / 2))
+        (MouseButton'3, MouseButtonState'Pressed) -> do
+            writeIORef disturbPos (Vector2 (dx + ox) (dy + oy))
+            writeIORef disturbEna 1
+        (MouseButton'3, MouseButtonState'Released) -> do
+            writeIORef disturbEna 0
         _ -> return ()
+    where r2f (x, y) = (realToFrac x, realToFrac y)
 
 simSize :: Int
-simSize = 900
+simSize = 10000
 
 initPos :: [(GLfloat, GLfloat)]
-initPos = concatMap (\x -> map (\y -> (fromIntegral x + 100, fromIntegral y + 100)) [0 .. 29]) [0 .. 29]
+initPos = concatMap (\x -> map (\y -> (fromIntegral x, fromIntegral y)) [0 .. 99]) [0 .. 99]
 
 initVel :: [(GLfloat, GLfloat)]
 initVel = replicate simSize (0, 0)
@@ -158,22 +181,23 @@ destroyDrawer (Drawer vao_front vao_back vbo_front vbo_back r prog comp) = do
     deleteObjectName prog
     deleteObjectName comp
 
-draw :: Drawer -> GLfloat  -> IO ()
-draw drawer viewFactor = do
+draw :: Drawer -> GLfloat -> Vector2 GLfloat -> IO ()
+draw drawer viewFactor viewOffset = do
     currentProgram $= Just (drawer_program drawer)
     r <- readIORef (drawer_is_reversed drawer)
     bindVertexArrayObject $= Just (
         if r then drawer_vao_back drawer
         else drawer_vao_front drawer)
-    vf <- get $
-        uniformLocation (drawer_program drawer) "view_factor"
+    let vf = UniformLocation 1
+        vo = UniformLocation 2
     uniform vf $= viewFactor
+    uniform vo $= viewOffset
     drawArrays Points 0 (fromIntegral simSize)
     bindVertexArrayObject $= Nothing
     checkGLError
 
-step :: Drawer -> IO ()
-step drawer = do
+step :: Drawer -> Vector2 GLfloat -> GLint -> GLfloat -> IO ()
+step drawer disturbPos disturbEna viewFactor = do
     currentProgram $= Just (drawer_compute drawer)
     r <- readIORef (drawer_is_reversed drawer)
     bindBufferBase IndexedShaderStorageBuffer 1 $= Just (
@@ -182,6 +206,12 @@ step drawer = do
     bindBufferBase IndexedShaderStorageBuffer 2 $= Just (
         if r then drawer_vbo_front drawer
         else drawer_vbo_back drawer)
+    let dp = UniformLocation 1
+        de = UniformLocation 2
+        dr = UniformLocation 3
+    uniform dp $= disturbPos
+    uniform de $= disturbEna
+    uniform dr $= 0.1 / viewFactor
     glDispatchCompute (fromIntegral simSize) 1 1
     bindBuffer ShaderStorageBuffer $= Nothing
     checkGLError
@@ -231,12 +261,13 @@ vertexShaderSource
           layout(location = 1) in vec2 vpos;
           layout(location = 2) in vec2 vvel;
           out vec4 fcolor;
-          uniform float view_factor;
+          layout(location = 1) uniform float view_factor;
+          layout(location = 2) uniform vec2 view_offset;
           void main() {
-              fcolor = vec4(0.5, 0.5, 0.5, 1);
-              gl_Position = vec4((vpos - vec2(100, 100)) * view_factor, 0, 1);
-              fcolor = vec4(vvel * view_factor * 10, 0, 1);
-              // fcolor = vec4(1, 1, 1, 1);
+              gl_Position = vec4((vpos - view_offset) * view_factor, 0, 1);
+              // fcolor = vec4(vvel * view_factor * 10, 0, 1);
+              if (vpos.y > 0) fcolor = vec4(0, 1, 0, 1);
+              else fcolor = vec4(1, 0, 0, 1);
           }
     |]
 
@@ -259,29 +290,39 @@ computeShaderSource
               vec2 vel;
           };
           layout(std430, binding = 1) buffer VertexBufferFront {
-              Particle particles[];
-          } front;
+              Particle front[];
+          };
           layout(std430, binding = 2) buffer VertexBufferBack {
-              Particle particles[];
-          } back;
+              Particle back[];
+          };
+          layout(location = 1) uniform vec2 disturb_pos;
+          layout(location = 2) uniform bool disturb_ena;
+          layout(location = 3) uniform float disturb_rad;
           const float dtime = 0.01;
           void main() {
               int p = int(gl_GlobalInvocationID.x);
-              vec2 acc = vec2(0, -9.8);
-              for (int i = 0; i < front.particles.length(); ++i) {
+              vec2 acc = vec2(0, 0);
+              acc += vec2(0, -9.8);
+              for (int i = 0; i < front.length(); ++i) {
                   if (i == p) continue;
-                  vec2 d = front.particles[i].pos - front.particles[p].pos;
+                  vec2 d = front[i].pos - front[p].pos;
                   float r = length(d);
-                  acc += d / r * max(dtime * max(1 / r / r, 1), 1000) * 0.0001;
+                  acc += d / r * min(1 / r / r * 10, 10000);
               }
-              float y = front.particles[p].pos.y;
+              float y = front[p].pos.y;
               if (y < 0) {
                   float f = -y * 1000;
-                  if (front.particles[p].vel.y > 0) f *= 0.3;
+                  if (front[p].vel.y > 0) f *= 0.5;
                   acc += vec2(0, f);
               }
-              back.particles[p].pos = front.particles[p].pos + front.particles[p].vel * dtime;
-              back.particles[p].vel = front.particles[p].vel + acc * dtime;
+              if (disturb_ena) {
+                  vec2 d = front[p].pos - disturb_pos;
+                  float r = length(d);
+                  if (r < disturb_rad)
+                      acc += d / r * 1000 * r / disturb_rad;
+              }
+              back[p].pos = front[p].pos + front[p].vel * dtime;
+              back[p].vel = front[p].vel + acc * dtime;
           }
       |]
 
