@@ -19,7 +19,7 @@ from.on("message", (msg, rinfo) => {
         to_id.set(key, id);
         to_endpoint.set(id, { addr: rinfo.address, port: rinfo.port });
     }
-    console.log(key + "received client data (" + rinfo.size + " bytes)");
+    console.log(key + " received client data (" + rinfo.size + " bytes)");
     const id = to_id.get(key);
     let header = Buffer.alloc(4);
     header.writeUInt16LE(rinfo.size);
@@ -34,7 +34,7 @@ to.on("data", (data) => {
     if (read_buffer.length < 2) return;
     const msg_size = read_buffer.readUInt16LE();
     if (read_buffer.length < msg_size + 4) return;
-    console.log(target_addr + ":" + target_port + " received data (" + msg_size + " bytes)");
+    console.log(target_addr + ":" + target_port + " received server data (" + msg_size + " bytes)");
     const id = read_buffer.readUInt16LE(2);
     if (!to_endpoint.has(id)) throw new Error("unknown package id");
     const endpoint = to_endpoint.get(id);
