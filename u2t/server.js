@@ -8,7 +8,7 @@ const target_port = 2302;
 const server = new net.Server();
 
 server.on("connection", (socket) => {
-    const addr_str = socket.address().address + ":" + socket.address().port;
+    const addr_str = socket.remoteAddress + ":" + socket.remotePort;
     console.log(addr_str + " connected");
     const to_conn = new Map();
     let read_buffer = Buffer.alloc(0);
