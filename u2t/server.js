@@ -2,7 +2,7 @@ const dgram = require("dgram");
 const net = require("net");
 
 const listen_port = 2303;
-const target_addr = "127.0.0.1";
+const target_addr = "172.105.233.110";
 const target_port = 2302;
 
 const server = new net.Server();
