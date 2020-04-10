@@ -14,6 +14,7 @@ const to_endpoint = new Map();
 from.on("message", (msg, rinfo) => {
     const key = rinfo.addr + ":" + rinfo.port;
     if (!to_id.has(key)) {
+        console.log(key + " connected");
         const id = to_id.size;
         to_id.set(key, id);
         to_endpoint.set(id, { addr: rinfo.address, port: rinfo.port });
@@ -25,7 +26,7 @@ from.on("message", (msg, rinfo) => {
     to.write(header);
     to.write(msg);
 })
-from.on("error", (e) => { throw e; });
+from.on("error", (e) => { console.log(e.message); });
 let read_buffer = Buffer.alloc(0);
 to.on("data", (data) => {
     read_buffer = Buffer.concat([read_buffer, data]);
@@ -38,7 +39,7 @@ to.on("data", (data) => {
     from.send(read_buffer, 4, msg_size, endpoint.port, endpoint.addr);
     read_buffer = read_buffer.subarray(msg_size + 4);
 });
-to.on("error", (e) => { throw e; });
+to.on("error", (e) => { console.log(e.message); });
 
 to.connect(target_port, target_addr);
 from.bind(listen_port);
