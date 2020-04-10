@@ -23,10 +23,12 @@ server.on("connection", (socket) => {
                 header.writeUInt16LE(id, 2);
                 socket.write(header);
                 socket.write(msg);
-            }));
+            }).on("error", (e) => { throw e; }));
         }
         to_conn.get(id).send(read_buffer, 4, msg_size, target_port, target_addr);
         read_buffer = read_buffer.subarray(msg_size + 4);
     });
+    socket.on("error", (e) => { throw e; });
 });
+server.on("error", (e) => { throw e; });
 server.listen(listen_port);
