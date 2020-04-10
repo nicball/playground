@@ -12,7 +12,7 @@ const to_id = new Map();
 const to_endpoint = new Map();
 
 from.on("message", (msg, rinfo) => {
-    const key = rinfo.addr + ":" + rinfo.port;
+    const key = rinfo.address + ":" + rinfo.port;
     if (!to_id.has(key)) {
         console.log(key + " connected");
         const id = to_id.size;
