@@ -1,8 +1,8 @@
 const dgram = require("dgram");
 const net = require("net");
 
-const listen_port = 2301;
-const target_addr = "127.0.0.1";
+const listen_port = 2302;
+const target_addr = "bwg.nicball.space";
 const target_port = 2303;
 
 const from = dgram.createSocket("udp4");
@@ -25,6 +25,7 @@ from.on("message", (msg, rinfo) => {
     to.write(header);
     to.write(msg);
 })
+from.on("error", (e) => { throw e; });
 let read_buffer = Buffer.alloc(0);
 to.on("data", (data) => {
     read_buffer = Buffer.concat([read_buffer, data]);
@@ -37,6 +38,7 @@ to.on("data", (data) => {
     from.send(read_buffer, 4, msg_size, endpoint.port, endpoint.addr);
     read_buffer = read_buffer.subarray(msg_size + 4);
 });
+to.on("error", (e) => { throw e; });
 
 to.connect(target_port, target_addr);
 from.bind(listen_port);
