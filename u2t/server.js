@@ -17,10 +17,12 @@ server.on("connection", (socket) => {
         if (read_buffer.length < 2) return;
         const msg_size = read_buffer.readUInt16LE();
         if (read_buffer.length < msg_size + 4) return;
+        console.log(addr_str + "received client data (" + msg_size + " bytes)");
         const id = read_buffer.readUInt16LE(2);
         if (!to_conn.has(id)) {
             console.log(addr_str + " new client " + id);
             to_conn.set(id, dgram.createSocket("udp4", (msg, rinfo) => {
+                console.log(target_addr + ":" + target_port + " received server data (" + rinfo.size + " bytes)");
                 let header = Buffer.alloc(4);
                 header.writeUInt16LE(rinfo.size);
                 header.writeUInt16LE(id, 2);
