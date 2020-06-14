@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>GO!</title>
+<meta charset="UTF-8">
+<style>
+body {
+    min-width: 640px;
+    max-width: 100vmin;
+    width: 60%;
+    margin-left: auto;
+    margin-right: auto;
+}
+.window {
+    width: 98%;
+    margin-left: 1%;
+    margin-right: 1%;
+    text-align: center;
+}
+.panel {
+    width: 90%;
+    margin-left: 5%;
+    margin-right: 5%;
+}
+#game-window {
+    display: none;
+}
+#waiting-window {
+    display: none;
+}
+#game-info {
+    font-size: 32px;
+}
+.name-tags {
+    float: left;
+    width: 23%;
+    font-size: 16px;
+    margin-left: 1%;
+    margin-right: 1%;
+}
+.scores {
+    float: left;
+    width: 18%;
+    margin-left: 1%;
+    margin-right: 1%;
+}
+#game-info-sep {
+    float: left;
+    width: 8%;
+    margin-left: 1%;
+    margin-right: 1%;
+}
+#login-button {
+    text-align: center;
+}
+</style>
+</head>
+
+<body>
+<div id="login-window" class="window">
+    <form>
+        <div>
+            <label for="user-name-input">ID: </label>
+            <input id="user-name-input" type="text" /> 
+            <span id="user-name-warning"></span>
+        </div>
+        <input id="login-button" type="button" onclick="clickLogin()" value="开始对战" />
+    </form>
+</div>
+<div id="waiting-window" class="window">正在寻找对手。。。</div>
+<div id="game-window" class="window">
+    <div id="game-info" class="panel">
+        <div id="player-name" class="name-tags"></div>
+        <div id="player-point" class="scores"></div>
+        <div id="game-info-sep">:</div>
+        <div id="opponent-point" class="scores"></div>
+        <div id="opponent-name" class="name-tags"></div>
+    </div>
+    <canvas id="canvas" width=1000 height=1000 class="panel"></canvas>
+    <form id="game-actions" class="panel">
+        <input type="button" onclick="clickPass()" value="让" />
+        <input type="button" onclick="clickAbandon()" value="负" />
+    </form>
+    <div id="status-line"></div>
+</div>
+
+<script>
+let mySide, myName, allNames;
+let gameOver = false;
+let polling = false;
+let loggingIn = false;
+let lastBoard = [];
+let lastPiece = false;
+
+function clickLogin() {
+    if (!loggingIn) {
+        loggingIn = true;
+        myName = document.getElementById("user-name-input").value;
+        document.getElementById('user-name-warning').innerHTML = "";
+        //websock = new WebSocket("ws://149.28.224.156:8081");
+        websock = new WebSocket("ws://127.0.0.1:8081");
+        websock.addEventListener("open", (ev) => {
+            websock.send(JSON.stringify({
+                tag: "Join",
+                contents: myName
+            }));
+        });
+        websock.addEventListener("message", (ev) => processServerMsg(ev.data));
+        websock.addEventListener("close", (ev) => {
+            if (!gameOver && !loggingIn) alert("链接丢失");
+            if (loggingIn) loggingIn = false;
+        });
+    }
+}
+
+function processServerMsg(msg) {
+    let cmd = JSON.parse(msg);
+    switch (cmd.tag) {
+    case "JoinResp":
+        if (cmd.contents) {
+            document.getElementById('login-window').style.display = 'none';
+            document.getElementById('waiting-window').style.display = 'block';
+            loggingIn = false;
+        }
+        else {
+            document.getElementById('user-name-warning').innerHTML = "用户名已被占用";
+        }
+        break;
+    case "GameStart":
+        document.getElementById('waiting-window').style.display = 'none';
+        document.getElementById('game-window').style.display = 'block';
+        mySide = cmd.contents[0];
+        allNames = cmd.contents[1];
+        showGameInfo([]);
+        opponentsTurn();
+        drawBoard();
+        alert('对局开始');
+        break;
+    case "FullUpdate":
+        lastBoard = cmd.contents[0];
+        lastPiece = cmd.contents[1];
+        drawCanvas(cmd.contents[0], cmd.contents[1]);
+        showGameInfo(cmd.contents[0]);
+        break;
+    case "Won":
+        drawWon(cmd.contents[0]);
+        break;
+    case "Poll":
+        myTurn();
+        polling = true;
+        break;
+    case "Bye":
+        document.getElementById('game-actions').style.display = 'none';
+        gameOver = true;
+        document.getElementById('status-line').innerHTML = '对局结束';
+        alert('对局结束');
+        break;
+    default:
+        throw ("Unexpected " + msg);
+    }
+}
+
+function showGameInfo(pieces) {
+    let oppoName = allNames.filter(name => name !== myName)[0];
+    let myPoint = pieces.filter(([_, side]) => side === mySide).length;
+    let oppoPoint = pieces.length - myPoint;
+    document.getElementById('player-name').innerHTML = myName;
+    document.getElementById('player-point').innerHTML = myPoint.toString();
+    document.getElementById('opponent-name').innerHTML = oppoName;
+    document.getElementById('opponent-point').innerHTML = oppoPoint.toString();
+}
+function myTurn() {
+    document.getElementById('player-name').style.color = sideToColor(mySide);
+    document.getElementById('opponent-name').style.color = 'black';
+}
+function opponentsTurn() {
+    document.getElementById('opponent-name').style.color =
+        sideToColor(oppositeSide(mySide));
+    document.getElementById('player-name').style.color = 'black';
+}
+
+document.getElementById('canvas').addEventListener("click", (ev) =>
+    clickCanvas(ev.offsetX, ev.offsetY));
+function clickCanvas(x, y) {
+    if (!gameOver && polling) {
+        let coord = offsetToCoord([x, y]);
+        websock.send(JSON.stringify({
+            tag: "Command",
+            contents: {
+                tag: "Move",
+                contents: coord
+            }
+        }));
+        polling = false;
+        opponentsTurn();
+    }
+}
+function clickPass() {
+    if (polling) {
+        websock.send(JSON.stringify({
+            tag: "Command",
+            contents: { tag: "Pass" }
+        }));
+        polling = false;
+        opponentsTurn();
+    }
+}
+function clickAbandon() {
+    if (polling) {
+        websock.send(JSON.stringify({
+            tag: "Command",
+            contents: { tag: "Abandon" }
+        }));
+        polling = false;
+        opponentsTurn();
+    }
+}
+
+function drawCanvas(board, lastPiece) {
+    clearCanvas();
+    drawBoard();
+    for (let piece of board) {
+        drawPiece(piece);
+    }
+    if (lastPiece && board.find(([coord]) =>
+        coord[0] === lastPiece[0] &&
+        coord[1] === lastPiece[1])) {
+        drawPointer(lastPiece);
+    }
+}
+
+const boardSize = 13;
+const canvasSize = 1000;
+const borderSize = 50;
+const blockSize = (canvasSize - 2 * borderSize) / (boardSize - 1);
+function coordToCanvas([x, y]) {
+    return [x * blockSize + borderSize,
+            canvasSize - (y * blockSize + borderSize)];
+}
+function offsetToCoord([x, y]) {
+    const xFactor = canvasSize / canvas.offsetWidth;
+    const yFactor = canvasSize / canvas.offsetHeight;
+    return [Math.round((x * xFactor - borderSize) / blockSize),
+            Math.round(((canvasSize - y * yFactor) - borderSize) / blockSize)];
+}
+function clearCanvas() {
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+function drawBoard() {
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    for (let x = 0; x < boardSize; ++x) {
+        let [x1, y1] = coordToCanvas([x, 0]);
+        let [x2, y2] = coordToCanvas([x, boardSize - 1]);
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+    }
+    for (let y = 0; y < boardSize; ++y) {
+        let [x1, y1] = coordToCanvas([0, y]);
+        let [x2, y2] = coordToCanvas([boardSize - 1, y]);
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+    }
+    ctx.stroke();
+    const anchors = [3, 6, 9];
+    for (let x of anchors) {
+        for (let y of anchors) {
+            const offset = coordToCanvas([x, y]);
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            ctx.ellipse(offset[0], offset[1], 5, 5, 0, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+    }
+}
+function drawPiece([coord, side], color) {
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const canvasCoord = coordToCanvas(coord);
+    ctx.fillStyle = color || sideToColor(side);
+    ctx.beginPath();
+    ctx.ellipse(canvasCoord[0], canvasCoord[1],
+        blockSize * 3 / 8, blockSize * 3 / 8,
+        0,
+        0, 2 * Math.PI);
+    ctx.fill();
+}
+function drawPointer(lastPiece) {
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const canvasCoord = coordToCanvas(lastPiece);
+    const size = blockSize / 4;
+    ctx.fillStyle = 'blue';
+    ctx.beginPath();
+    ctx.moveTo(canvasCoord[0], canvasCoord[1]);
+    ctx.lineTo(canvasCoord[0] + size, canvasCoord[1]);
+    ctx.lineTo(canvasCoord[0], canvasCoord[1] + size);
+    ctx.closePath();
+    ctx.fill();
+}
+function drawWon(part) {
+    for (let piece of part) {
+        drawPiece([piece, null], "yellow");
+    }
+    console.log("drawWon!");
+}
+function sideToColor(side) {
+    switch (side) {
+    case "Black": return "red";
+    case "White": return "green";
+    default: throw "Fantastic";
+    }
+}
+function oppositeSide(side) {
+    switch (side) {
+    case "Black": return "White";
+    case "White": return "Black";
+    default: throw "Fantastic";
+    }
+}
+</script>
+</body>
+</html>
