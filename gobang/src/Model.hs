@@ -1,6 +1,7 @@
 module Model where
 
-import Data.List (partition, sort, group)
+import Data.List (sortBy)
+import Data.Ord (comparing)
 import GHC.Generics (Generic)
 
 type Coord = (Int, Int)
@@ -48,7 +49,7 @@ data Piece
         { pieceCoord :: Coord
         , pieceSide :: Side
         }
-    deriving (Eq)
+    deriving (Eq, Show)
 
 data Side = Black | White
     deriving (Eq, Show, Generic)
@@ -79,13 +80,13 @@ won board side (coordX, coordY)
         crosslr = filter (\(Piece (x, y) sd) -> coordX - x == y - coordY && sd == side) board
         crossrl = filter (\(Piece (x, y) sd) -> coordX - x == coordY - y && sd == side) board
         isAdj (Piece c1 _) (Piece c2 _) = distance c1 c2 < 1.5
-        group = foldl
-            (\acc p ->
-                let new = map (\g -> if any (isAdj p) g then p : g else g) acc
-                in if any (any (== p)) new
-                    then new
-                    else [p] : new)
-            []
+        group = groupSeq . sortBy (comparing (\(Piece c _) -> c))
+        groupSeq xs =
+            let (res, last) = foldl
+                    (\(acc, lead) x -> if any (isAdj x) lead || null lead then (acc, x : lead) else (lead : acc, [x]))
+                    ([], [])
+                    xs
+            in res ++ [last]
         parts = group hori ++ group vert ++ group crosslr ++ group crossrl
         winning = filter ((> 4) . length) parts
     in case winning of

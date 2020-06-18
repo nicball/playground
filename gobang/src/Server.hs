@@ -60,10 +60,10 @@ startRoom sessions = do
     gameBoard <- newIORef emptyBoard
     abandoned <- newIORef []
     isWon <- newIORef False
-    while ((&&) <$> (canContinue <$> readIORef abandoned) <*> (not <$> readIORef isWon)) do
-        abans <- readIORef abandoned
-        forM_ (aliveSessions abans) \(name, (conn, pid)) ->
+    forWhile (cycle (Map.assocs sessions)) \(name, (conn, pid)) -> do
+        whenM (notElem pid <$> readIORef abandoned) do
             processCmd name conn pid gameBoard abandoned isWon
+        (&&) <$> (notAllAbandoned <$> readIORef abandoned) <*> (not <$> readIORef isWon)
     broadcast (const Bye)
     where
     sendGameStarts
@@ -93,21 +93,26 @@ startRoom sessions = do
                                 writeIORef isWon True
                             Nothing -> return ()
                     Nothing -> processCmd name conn pid gameBoard abandoned isWon
-    canContinue abans = Map.size sessions - length abans > 1
+    notAllAbandoned abans = Map.size sessions - length abans > 1
     aliveSessions abans = filter (\(_, (_, pid)) -> notElem pid abans) $ Map.assocs sessions
     broadcast f
         = forM_ (Map.elems sessions) \(conn, pid) ->
             serialize conn (f pid)
     toPieceList board
-        = map fromPiece board
-    fromPiece (Piece coord side)
-        = (coord, side)
+        = map (\(Piece coord side) -> (coord, side)) board
 
-while :: Monad m => m Bool -> m () -> m ()
-while cond action = do
+whenM :: Monad m => m Bool -> m () -> m ()
+whenM cond action = do
     c <- cond
-    if c then action >> while cond action
-    else return ()
+    if c then action else return ()
+
+forWhile :: Monad m => [a] -> (a -> m Bool) -> m ()
+forWhile (x : xs) action = do
+    continue <- action x
+    if continue
+        then forWhile xs action
+        else return ()
+forWhile [] _ = return ()
 
 logLn :: String -> IO ()
 logLn str = hPutStrLn stderr str
