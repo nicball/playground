@@ -97,8 +97,8 @@ function clickLogin() {
         loggingIn = true;
         myName = document.getElementById("user-name-input").value;
         document.getElementById('user-name-warning').innerHTML = "";
-        //websock = new WebSocket("ws://149.28.224.156:8081");
-        websock = new WebSocket("ws://127.0.0.1:8081");
+        websock = new WebSocket("ws://149.28.224.156:8081");
+        //websock = new WebSocket("ws://127.0.0.1:8081");
         websock.addEventListener("open", (ev) => {
             websock.send(JSON.stringify({
                 tag: "Join",
