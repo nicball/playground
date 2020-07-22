@@ -1,0 +1,88 @@
+#lang pie
+
+(claim +
+  (-> Nat Nat Nat))
+
+(define +
+  (lambda (n j)
+    (iter-Nat n
+      j
+      (lambda (partial) (add1 partial)))))
+
+(claim *
+  (-> Nat Nat Nat))
+
+(define *
+  (lambda (n j)
+    (iter-Nat n
+      0
+      (lambda (partial) (+ j partial)))))
+
+(claim commutative-+-1
+  (Pi ((n Nat))
+    (= Nat (+ n 1) (+ 1 n))))
+
+(define commutative-+-1
+  (lambda (n)
+    (ind-Nat n
+      (lambda (n) (= Nat (+ n 1) (+ 1 n)))
+      (same 1)
+      (lambda (n-1 proof-n-1)
+        (cong proof-n-1 (the (-> Nat Nat) (lambda (x) (add1 x))))))))
+
+(claim right-id-+
+  (Pi ((n Nat))
+    (= Nat (+ n 0) n)))
+
+(define right-id-+
+  (lambda (n)
+    (ind-Nat n
+      (lambda (n) (= Nat (+ n 0) n))
+      (same 0)
+      (lambda (n-1 proof-n-1)
+        (cong proof-n-1 (the (-> Nat Nat) (lambda (x) (add1 x))))))))
+
+(claim right-incr-+
+  (Pi ((n Nat))
+    (= Nat (+ n 1) (add1 n))))
+
+(define right-incr-+
+  (lambda (n)
+    (ind-Nat n
+      (lambda (n) (= Nat (+ n 1) (add1 n)))
+      (same 1)
+      (lambda (n-1 proof-n-1)
+        (cong proof-n-1 (the (-> Nat Nat) (lambda (x) (add1 x))))))))
+
+(claim right-ind-+
+  (Pi ((k Nat) (n Nat))
+    (= Nat (+ k (add1 n)) (add1 (+ k n)))))
+
+(define right-ind-+
+  (lambda (k n)
+    (ind-Nat n
+      (lambda (n) (= Nat (+ k (add1 n)) (add1 (+ k n))))
+      (trans (right-incr-+ k)
+        (symm
+          (cong (right-id-+ k)
+            (the (-> Nat Nat) (lambda (x) (add1 x))))))
+      (lambda (n-1 proof-n-1)
+        (ind-Nat k
+          (lambda (k) (= Nat (+ k (add1 (add1 n-1))) (add1 (+ k (add1 n-1)))))
+          (same (add1 (add1 n-1)))
+          (lambda (k-1 proof-k-1)
+            (cong proof-k-1 (the (-> Nat Nat) (lambda (x) (add1 x))))))))))
+
+(claim commutative-+
+  (Pi ((n Nat) (m Nat))
+    (= Nat (+ m n) (+ n m))))
+
+(define commutative-+
+  (lambda (n m)
+    (ind-Nat n
+      (lambda (n) (= Nat (+ m n) (+ n m)))
+      (trans (right-id-+ m) (the (= Nat m (+ 0 m)) (same m)))
+      (lambda (n-1 proof-n-1)
+        (trans
+          (right-ind-+ m n-1)
+          (cong proof-n-1 (the (-> Nat Nat) (lambda (x) (add1 x)))))))))
