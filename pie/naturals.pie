@@ -1,5 +1,23 @@
 #lang pie
 
+(claim flip
+  (Pi ((X U) (Y U) (Z U))
+    (-> (-> X Y Z)
+      (-> Y X Z))))
+
+(define flip
+  (lambda (X Y Z f x y)
+    (f y x)))
+
+(claim flip-op
+  (Pi ((X U))
+    (-> (-> X X X)
+      (-> X X X))))
+
+(define flip-op
+  (lambda (X)
+    (flip X X X)))
+
 (claim nat+
   (-> Nat Nat Nat))
 
@@ -33,16 +51,6 @@
       (lambda (n-1 proof-n-1)
         (cong proof-n-1 (nat+ 1))))))
 
-(claim right-incr-nat+
-  (Pi ((n Nat))
-    (= Nat (nat+ n 1) (add1 n))))
-
-(define right-incr-nat+
-  (lambda (n)
-    (trans
-      (right-step-nat+ n 0)
-      (cong (right-id-nat+ n) (nat+ 1)))))
-
 (claim commutative-nat+
   (Pi ((m Nat) (n Nat))
     (= Nat (nat+ m n) (nat+ n m))))
@@ -51,7 +59,7 @@
   (lambda (m n)
     (ind-Nat n
       (lambda (n) (= Nat (nat+ m n) (nat+ n m)))
-      (trans (right-id-nat+ m) (the (= Nat m (nat+ 0 m)) (same m)))
+      (right-id-nat+ m)
       (lambda (n-1 proof-n-1)
         (trans
           (right-step-nat+ m n-1)
@@ -65,16 +73,13 @@
   (lambda (m n p)
     (ind-Nat n
       (lambda (n) (= Nat (nat+ (nat+ m n) p) (nat+ m (nat+ n p))))
-      (trans
-        (cong (commutative-nat+ m 0)
-          (the (-> Nat Nat) (lambda (x) (nat+ x p))))
-        (cong (the (= Nat p (nat+ 0 p)) (same p))
-          (nat+ m)))
+      (cong (commutative-nat+ m 0)
+        (flip-op Nat nat+ p))
       (lambda (n-1 proof-n-1)
         (trans
           (trans
             (cong (right-step-nat+ m n-1)
-              (the (-> Nat Nat) (lambda (x) (nat+ x p))))
+              (flip-op Nat nat+ p))
             (cong proof-n-1
               (nat+ 1)))
           (symm (right-step-nat+ m (nat+ n-1 p))))))))
@@ -131,7 +136,7 @@
               (trans
                 (symm (right-step-nat+ k n-1))
                 (commutative-nat+ k (add1 n-1)))
-              (the (-> Nat Nat) (lambda (x) (nat+ x (nat* n-1 k))))))
+              (flip-op Nat nat+ (nat* n-1 k))))
           (associative-nat+ (add1 n-1) k (nat* n-1 k)))))))
       
 
@@ -174,7 +179,7 @@
         (trans
           (commutative-nat* p (nat+ n m))
           (right-distributive-nat*-over-nat+ n m p))
-        (cong (commutative-nat* n p) (the (-> Nat Nat) (lambda (x) (nat+ x (nat* m p))))))
+        (cong (commutative-nat* n p) (flip-op Nat nat+ (nat* m p))))
       (cong (commutative-nat* m p) (nat+ (nat* p n))))))
 
 (claim associative-nat*
@@ -187,13 +192,13 @@
       (lambda (n) (= Nat (nat* (nat* m n) p) (nat* m (nat* n p))))
       (trans
         (cong (right-zero-nat* m)
-          (the (-> Nat Nat) (lambda (x) (nat* x p))))
+          (flip-op Nat nat* p))
         (symm (right-zero-nat* m)))
       (lambda (n-1 proof-n-1)
         (trans
           (trans
             (trans
-              (cong (right-step-nat* m n-1) (the (-> Nat Nat) (lambda (x) (nat* x p))))
+              (cong (right-step-nat* m n-1) (flip-op Nat nat* p))
               (right-distributive-nat*-over-nat+ m (nat* m n-1) p))
             (cong proof-n-1 (nat+ (nat* m p))))
           (symm (left-distributive-nat*-over-nat+ m p (nat* n-1 p))))))))
