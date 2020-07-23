@@ -1,0 +1,199 @@
+#lang pie
+
+(claim nat+
+  (-> Nat Nat Nat))
+
+(define nat+
+  (lambda (n j)
+    (iter-Nat n
+      j
+      (lambda (partial) (add1 partial)))))
+
+(claim right-id-nat+
+  (Pi ((n Nat))
+    (= Nat (nat+ n 0) n)))
+
+(define right-id-nat+
+  (lambda (n)
+    (ind-Nat n
+      (lambda (n) (= Nat (nat+ n 0) n))
+      (same 0)
+      (lambda (n-1 proof-n-1)
+        (cong proof-n-1 (nat+ 1))))))
+
+(claim right-step-nat+
+  (Pi ((n Nat) (k Nat))
+    (= Nat (nat+ n (add1 k)) (add1 (nat+ n k)))))
+
+(define right-step-nat+
+  (lambda (n k)
+    (ind-Nat n
+      (lambda (n) (= Nat (nat+ n (add1 k)) (add1 (nat+ n k))))
+      (same (add1 k))
+      (lambda (n-1 proof-n-1)
+        (cong proof-n-1 (nat+ 1))))))
+
+(claim right-incr-nat+
+  (Pi ((n Nat))
+    (= Nat (nat+ n 1) (add1 n))))
+
+(define right-incr-nat+
+  (lambda (n)
+    (trans
+      (right-step-nat+ n 0)
+      (cong (right-id-nat+ n) (nat+ 1)))))
+
+(claim commutative-nat+
+  (Pi ((m Nat) (n Nat))
+    (= Nat (nat+ m n) (nat+ n m))))
+
+(define commutative-nat+
+  (lambda (m n)
+    (ind-Nat n
+      (lambda (n) (= Nat (nat+ m n) (nat+ n m)))
+      (trans (right-id-nat+ m) (the (= Nat m (nat+ 0 m)) (same m)))
+      (lambda (n-1 proof-n-1)
+        (trans
+          (right-step-nat+ m n-1)
+          (cong proof-n-1 (nat+ 1)))))))
+
+(claim associative-nat+
+  (Pi ((m Nat) (n Nat) (p Nat))
+    (= Nat (nat+ (nat+ m n) p) (nat+ m (nat+ n p)))))
+
+(define associative-nat+
+  (lambda (m n p)
+    (ind-Nat n
+      (lambda (n) (= Nat (nat+ (nat+ m n) p) (nat+ m (nat+ n p))))
+      (trans
+        (cong (commutative-nat+ m 0)
+          (the (-> Nat Nat) (lambda (x) (nat+ x p))))
+        (cong (the (= Nat p (nat+ 0 p)) (same p))
+          (nat+ m)))
+      (lambda (n-1 proof-n-1)
+        (trans
+          (trans
+            (cong (right-step-nat+ m n-1)
+              (the (-> Nat Nat) (lambda (x) (nat+ x p))))
+            (cong proof-n-1
+              (nat+ 1)))
+          (symm (right-step-nat+ m (nat+ n-1 p))))))))
+
+(claim nat*
+  (-> Nat Nat Nat))
+
+(define nat*
+  (lambda (n j)
+    (iter-Nat n
+      0
+      (nat+ j))))
+
+(claim right-zero-nat*
+  (Pi ((n Nat))
+    (= Nat (nat* n 0) 0)))
+
+(define right-zero-nat*
+  (lambda (n)
+    (ind-Nat n
+      (lambda (n) (= Nat (nat* n 0) 0))
+      (same 0)
+      (lambda (n-1 proof-n-1)
+        proof-n-1))))
+
+(claim right-id-nat*
+  (Pi ((n Nat))
+    (= Nat (nat* n 1) n)))
+
+(define right-id-nat*
+  (lambda (n)
+    (ind-Nat n
+      (lambda (n) (= Nat (nat* n 1) n))
+      (same 0)
+      (lambda (n-1 proof-n-1)
+          (cong proof-n-1 (nat+ 1))))))
+
+(claim right-step-nat*
+  (Pi ((n Nat) (k Nat))
+    (= Nat (nat* n (add1 k)) (nat+ n (nat* n k)))))
+
+(define right-step-nat*
+  (lambda (n k)
+    (ind-Nat n
+      (lambda (n) (= Nat (nat* n (add1 k)) (nat+ n (nat* n k))))
+      (same 0)
+      (lambda (n-1 proof-n-1)
+        (trans
+          (trans
+            (trans
+              (cong proof-n-1 (nat+ (add1 k)))
+              (cong (symm (associative-nat+ k n-1 (nat* n-1 k))) (nat+ 1)))
+            (cong
+              (trans
+                (symm (right-step-nat+ k n-1))
+                (commutative-nat+ k (add1 n-1)))
+              (the (-> Nat Nat) (lambda (x) (nat+ x (nat* n-1 k))))))
+          (associative-nat+ (add1 n-1) k (nat* n-1 k)))))))
+      
+
+(claim commutative-nat*
+  (Pi ((m Nat) (n Nat))
+    (= Nat (nat* m n) (nat* n m))))
+
+(define commutative-nat*
+  (lambda (m n)
+    (ind-Nat n
+      (lambda (n) (= Nat (nat* m n) (nat* n m)))
+      (right-zero-nat* m)
+      (lambda (n-1 proof-n-1)
+        (trans
+          (right-step-nat* m n-1)
+          (cong proof-n-1 (nat+ m)))))))
+
+(claim right-distributive-nat*-over-nat+
+  (Pi ((n Nat) (m Nat) (p Nat))
+    (= Nat (nat* (nat+ n m) p) (nat+ (nat* n p) (nat* m p)))))
+
+(define right-distributive-nat*-over-nat+
+  (lambda (n m p)
+    (ind-Nat n
+      (lambda (n) (= Nat (nat* (nat+ n m) p) (nat+ (nat* n p) (nat* m p))))
+      (same (nat* m p))
+      (lambda (n-1 proof-n-1)
+        (trans
+          (cong proof-n-1 (nat+ p))
+          (symm (associative-nat+ p (nat* n-1 p) (nat* m p))))))))
+
+(claim left-distributive-nat*-over-nat+
+  (Pi ((p Nat) (n Nat) (m Nat))
+    (= Nat (nat* p (nat+ n m)) (nat+ (nat* p n) (nat* p m)))))
+
+(define left-distributive-nat*-over-nat+
+  (lambda (p n m)
+    (trans
+      (trans
+        (trans
+          (commutative-nat* p (nat+ n m))
+          (right-distributive-nat*-over-nat+ n m p))
+        (cong (commutative-nat* n p) (the (-> Nat Nat) (lambda (x) (nat+ x (nat* m p))))))
+      (cong (commutative-nat* m p) (nat+ (nat* p n))))))
+
+(claim associative-nat*
+  (Pi ((m Nat) (n Nat) (p Nat))
+    (= Nat (nat* (nat* m n) p) (nat* m (nat* n p)))))
+
+(define associative-nat*
+  (lambda (m n p)
+    (ind-Nat n
+      (lambda (n) (= Nat (nat* (nat* m n) p) (nat* m (nat* n p))))
+      (trans
+        (cong (right-zero-nat* m)
+          (the (-> Nat Nat) (lambda (x) (nat* x p))))
+        (symm (right-zero-nat* m)))
+      (lambda (n-1 proof-n-1)
+        (trans
+          (trans
+            (trans
+              (cong (right-step-nat* m n-1) (the (-> Nat Nat) (lambda (x) (nat* x p))))
+              (right-distributive-nat*-over-nat+ m (nat* m n-1) p))
+            (cong proof-n-1 (nat+ (nat* m p))))
+          (symm (left-distributive-nat*-over-nat+ m p (nat* n-1 p))))))))
