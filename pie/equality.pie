@@ -1,0 +1,34 @@
+#lang pie
+
+(claim my-cong
+  (Pi ((X U) (Y U) (f (-> X Y)) (a X) (b X))
+    (-> (= X a b)
+      (= Y (f a) (f b)))))
+
+(define my-cong
+  (lambda (X Y f a b proof)
+    (replace proof
+      (lambda (x) (= Y (f a) (f x)))
+      (same (f a)))))
+
+(claim my-symm
+  (Pi ((X U) (a X) (b X))
+    (-> (= X a b)
+      (= X b a))))
+
+(define my-symm
+  (lambda (X a b proof)
+    (replace proof
+      (lambda (x) (= X x a))
+      (same a))))
+
+(claim my-trans
+  (Pi ((X U) (a X) (b X) (c X))
+    (-> (= X a b) (= X b c)
+      (= X a c))))
+
+(define my-trans
+  (lambda (X a b c proof-a=b proof-b=c)
+    (replace proof-b=c
+      (lambda (x) (= X a x))
+      proof-a=b)))
