@@ -22,12 +22,16 @@ data Component : Type where
   One : (alwaysOne : Wire) -> Component
   Zero : (alwaysZero : Wire) -> Component
   Observer : (tag : String) -> Wire -> Component
+  Relay : (in' : Wire) -> (out : Wire) -> Component
+  Boot : Wire -> Component
 
 Show Component where
-  show (Nand a b c) = show c ++ "=" ++ "~(" ++ show a ++ "&" ++ show b ++ ")"
+  show (Nand a b o) = show o ++ "=" ++ "~(" ++ show a ++ "&" ++ show b ++ ")"
   show (One w) = show w ++ "=1"
   show (Zero w) = show w ++ "=0"
   show (Observer tag w) = tag ++ "=" ++ show w
+  show (Relay i o) = show o ++ "=" ++ show i
+  show (Boot w) = show w ++ "=<boot>"
 
 Circuit : Type
 Circuit = List Component
@@ -61,6 +65,17 @@ combinatorial f = do
   comps <- f out
   addComponents comps
   pure out
+
+relay : Wire -> CircuitBuilder Wire
+relay w = combinatorial \out =>
+  pure [ Relay w out ]
+
+delay : Nat -> Wire -> CircuitBuilder Wire
+delay 0 w = pure w
+delay (S k) w = relay w >>= delay k
+
+boot : Wire -> CircuitBuilder ()
+boot w = addComponents [ Boot w ]
 
 nand : Wire -> Wire -> CircuitBuilder Wire
 nand a b = combinatorial \out =>
@@ -127,6 +142,18 @@ boolToWire = traverse \b =>
     True => one
     False => zero
 
+clock : (halfWidthMinusOne : Nat) -> CircuitBuilder Wire
+clock n = do
+  w <- newWire
+  i <- delayWithBoot n w
+  const1 <- one
+  addComponents [ Nand const1 i w ]
+  pure w
+  where
+    delayWithBoot : Nat -> Wire -> CircuitBuilder Wire
+    delayWithBoot 0 w = boot w >> pure w
+    delayWithBoot (S k) w = boot w >> relay w >>= delayWithBoot k
+
 data Signal = High | Low | Undefined
 
 Show Signal where
@@ -175,19 +202,12 @@ initialState = concat . map toMap
     toMap (One w) = Valid . fromList $ [ (w, High) ]
     toMap (Zero w) = Valid . fromList $ [ (w, Low) ]
     toMap (Observer _ w) = Valid . fromList $ [ (w, Undefined) ]
+    toMap (Relay i o) = Valid . fromList $ [ (i, Undefined), (o, Undefined) ]
+    toMap (Boot w) = Valid . fromList $ [ (w, High) ]
 
 count : (n : Nat) -> Vect n Nat
 count 0 = Nil
 count (S n) = snoc (count n) n
-
-exampleCircuit : Circuit
-exampleCircuit = runCircuitBuilder $ do
-  const2 <- boolToWire [ False, True, False, False, False, False, False, False ]
-  const3 <- boolToWire [ True, True, False, False, False, False, False, False ]
-  (shouldBe5, shouldBe0) <- byteAdder const2 const3 !zero
-  let indexed5 = zipWith (,) shouldBe5 (count 8)
-  traverse (\(w, n) => observe ("out[" ++ show n ++ "]") w) indexed5
-  observe "out carry" shouldBe0
 
 runCircuit : Circuit -> CircuitState-> CircuitState
 runCircuit comps cstate = concat . map apply $ comps
@@ -205,10 +225,16 @@ runCircuit comps cstate = concat . map apply $ comps
       let as = lookupSignal a cstate
           bs = lookupSignal b cstate
       in case (as, bs) of
-        (Just asig, Just bsig) => Valid . fromList $
-          [ (a, asig), (b, bsig), (o, signalNand asig bsig) ]
+        (Just asig, Just bsig) => Valid . fromList $ [ (o, signalNand asig bsig) ]
         _ => Invalid
-    apply c = initialState [c]
+    apply (One w) = Valid . fromList $ [ (w, High) ]
+    apply (Zero w) = Valid . fromList $ [ (w, Low) ]
+    apply (Observer _ w) = Valid . fromList $ [ (w, Undefined) ]
+    apply (Relay i o) =
+      case lookupSignal i cstate of
+        Just isig => Valid . fromList $ [ (o, isig) ]
+        Nothing => Invalid
+    apply (Boot w) = Valid empty
 
 Observations : Type
 Observations = SortedMap String Signal
@@ -224,5 +250,21 @@ getObservations comps (Valid cstate) = fromList . concatMap ob $ comps
     ob _ = []
 getObservations _ Invalid = empty
 
+exampleAdder : Circuit
+exampleAdder = runCircuitBuilder $ do
+  const2 <- boolToWire [ False, True, False, False, False, False, False, False ]
+  const3 <- boolToWire [ True, True, False, False, False, False, False, False ]
+  (shouldBe5, shouldBe0) <- byteAdder const2 const3 !zero
+  let indexed5 = zipWith (,) shouldBe5 (count 8)
+  traverse (\(w, n) => observe ("out[" ++ show n ++ "]") w) indexed5
+  observe "out_carry" shouldBe0
+
+exampleClock : Nat -> Circuit
+exampleClock n = runCircuitBuilder $ do
+  c <- clock n
+  observe "clock" c
+
 main : IO ()
-main = map (const ()) . traverse (putStrLn . show) . map (getObservations exampleCircuit) . iterateN 50 (runCircuit exampleCircuit) . initialState $ exampleCircuit
+main =
+  let exm = exampleClock 5
+  in map (const ()) . traverse (putStrLn . show . getObservations exm) . iterateN 50 (runCircuit exm) . initialState $ exm

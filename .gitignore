@@ -47,3 +47,6 @@ target/
 *.class
 *.class
 *.log
+
+# idris
+build/
