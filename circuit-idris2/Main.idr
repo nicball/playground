@@ -250,6 +250,12 @@ getObservations comps (Valid cstate) = fromList . concatMap ob $ comps
     ob _ = []
 getObservations _ Invalid = empty
 
+putObservationsLn : Observations -> IO ()
+putObservationsLn = (>> putChar '\n') . traverse f . toList
+  where
+    f : (String, Signal) -> IO ()
+    f (tag, sig) = putStr $ tag ++ "=" ++ show sig ++ ", "
+
 exampleAdder : Circuit
 exampleAdder = runCircuitBuilder $ do
   const2 <- boolToWire [ False, True, False, False, False, False, False, False ]
@@ -267,4 +273,4 @@ exampleClock n = runCircuitBuilder $ do
 main : IO ()
 main =
   let exm = exampleClock 5
-  in map (const ()) . traverse (putStrLn . show . getObservations exm) . iterateN 50 (runCircuit exm) . initialState $ exm
+  in map (const ()) . traverse (putObservationsLn . getObservations exm) . iterateN 50 (runCircuit exm) . initialState $ exm
