@@ -1,9 +1,11 @@
 module Main
+
 import Control.Monad.State
-import Data.Vect
+import Data.Fin
+import Data.List
 import Data.Nat
 import Data.SortedMap
-import Data.List
+import Data.Vect
 
 data Wire : Type where
   MkWire : Int -> Wire
@@ -81,16 +83,28 @@ nand : Wire -> Wire -> CircuitBuilder Wire
 nand a b = combinatorial \out =>
   pure [ Nand a b out ]
 
+nand_ : Wire -> Wire -> Wire -> CircuitBuilder ()
+nand_ a b o = addComponents [ Nand a b o ]
+
 one : CircuitBuilder Wire
 one = combinatorial \out =>
   pure [ One out ]
+
+one_ : Wire -> CircuitBuilder ()
+one_ w = addComponents [ One w ]
 
 zero : CircuitBuilder Wire
 zero = combinatorial \out =>
   pure [ Zero out ]
 
+zero_ : Wire -> CircuitBuilder ()
+zero_ w = addComponents [ Zero w ]
+
 not : Wire -> CircuitBuilder Wire
 not a = nand a !one
+
+not_ : Wire -> Wire -> CircuitBuilder ()
+not_ a na = addComponents [ Nand a !one na ]
 
 and : Wire -> Wire -> CircuitBuilder Wire
 and a b = not !(nand a b)
@@ -103,6 +117,9 @@ xor a b = and !(nand a b) !(or a b)
 
 nor : Wire -> Wire -> CircuitBuilder Wire
 nor a b = not !(or a b)
+
+nor_ : Wire -> Wire -> Wire -> CircuitBuilder ()
+nor_ a b o = not_ !(or a b) o
 
 halfAdder : Wire -> Wire -> CircuitBuilder (Wire, Wire)
 halfAdder a b = [| (xor a b, and a b) |]
@@ -136,30 +153,61 @@ byteAdder as bs carryIn = dFoldL (\n => CircuitBuilder (Vect n Wire, Wire)) (\ms
       (o, c') <- fullAdder a b c
       pure (snoc os o, c')
 
-boolToWire : Vect n Bool -> CircuitBuilder (Vect n Wire)
-boolToWire = traverse \b =>
+binsToConsts : Vect n (Fin 2) -> CircuitBuilder (Vect n Wire)
+binsToConsts = traverse \b =>
   case b of
-    True => one
-    False => zero
+    1 => one
+    0 => zero
+
+binsToBootedWires : Vect n (Fin 2) -> CircuitBuilder (Vect n Wire)
+binsToBootedWires = traverse \b => do
+  w <- newWire
+  if b == 1 then boot w else pure ()
+  pure w
 
 clock : (halfWidthMinusOne : Nat) -> CircuitBuilder Wire
 clock n = do
   w <- newWire
-  i <- delayWithBoot n w
-  const1 <- one
-  addComponents [ Nand const1 i w ]
-  pure w
-  where
-    delayWithBoot : Nat -> Wire -> CircuitBuilder Wire
-    delayWithBoot 0 w = boot w >> pure w
-    delayWithBoot (S k) w = boot w >> relay w >>= delayWithBoot k
+  i <- delay n w
+  not_ i w
+  pure i
 
-data Signal = High | Low | Undefined
+gatedSRLatch_ : (set : Wire) -> (reset : Wire) -> (enable : Wire)
+  -> (q : Wire) -> (nq : Wire) -> CircuitBuilder ()
+gatedSRLatch_ s r e q nq= do
+  s' <- and s e
+  r' <- and r e
+  nand_ r' nq q
+  nand_ s' q nq
+  pure ()
+
+gatedSRLatch : (set : Wire) -> (reset : Wire) -> (enable : Wire) -> CircuitBuilder (Wire, Wire)
+gatedSRLatch s r e = do
+  q <- newWire
+  nq <- newWire
+  gatedSRLatch_ s r e q nq
+  pure (q, nq)
+
+gatedDLatch : (data' : Wire) -> (enable : Wire) -> CircuitBuilder (Wire, Wire)
+gatedDLatch d e = gatedSRLatch d !(not d) e
+
+dFlipFlop_ : (data' : Wire) -> (clock : Wire) -> (dataNext : Wire) -> CircuitBuilder ()
+dFlipFlop_ d clk dn = do
+  (q, nq) <- gatedDLatch d !(not clk)
+  dummy <- newWire
+  gatedSRLatch_ q nq clk dn dummy
+
+dFlipFlop : (data' : Wire) -> (clock : Wire) -> CircuitBuilder Wire
+dFlipFlop d clk = do
+  dn <- newWire
+  dFlipFlop_ d clk dn
+  pure dn
+
+data Signal = High | Low
 
 Show Signal where
   show High = "1"
   show Low = "0"
-  show Undefined = "x"
 
 data CircuitState
   = Valid (SortedMap Wire Signal)
@@ -175,13 +223,9 @@ Semigroup CircuitState where
   Valid a <+> Valid b = toCS . sequence $ mergeWith m (map Just a) (map Just b)
     where
       m : Maybe Signal -> Maybe Signal -> Maybe Signal
-      m Nothing _ = Nothing
-      m _ Nothing = Nothing
-      m (Just Undefined) (Just x) = Just x
-      m (Just x) (Just Undefined) = Just x
       m (Just High) (Just High) = Just High
       m (Just Low) (Just Low) = Just Low
-      m (Just _) (Just _) = Nothing
+      m _ _ = Nothing
 
       toCS : Maybe (SortedMap Wire Signal) -> CircuitState
       toCS (Just cs) = Valid cs
@@ -198,11 +242,11 @@ initialState : Circuit -> CircuitState
 initialState = concat . map toMap 
   where
     toMap : Component -> CircuitState
-    toMap (Nand a b c) = Valid . fromList $ [ (a, Undefined), (b, Undefined), (c, Undefined) ]
-    toMap (One w) = Valid . fromList $ [ (w, High) ]
+    toMap (Nand a b c) = Valid . fromList $ [ (a, Low), (b, Low), (c, Low) ]
+    toMap (One w) = Valid . fromList $ [ (w, Low) ]
     toMap (Zero w) = Valid . fromList $ [ (w, Low) ]
-    toMap (Observer _ w) = Valid . fromList $ [ (w, Undefined) ]
-    toMap (Relay i o) = Valid . fromList $ [ (i, Undefined), (o, Undefined) ]
+    toMap (Observer _ w) = Valid . fromList $ [ (w, Low) ]
+    toMap (Relay i o) = Valid . fromList $ [ (i, Low), (o, Low) ]
     toMap (Boot w) = Valid . fromList $ [ (w, High) ]
 
 count : (n : Nat) -> Vect n Nat
@@ -210,37 +254,35 @@ count 0 = Nil
 count (S n) = snoc (count n) n
 
 runCircuit : Circuit -> CircuitState-> CircuitState
-runCircuit comps cstate = concat . map apply $ comps
+runCircuit comps cstate = concat . map drive $ comps
   where
     signalNand : Signal -> Signal -> Signal
-    signalNand Undefined _ = Undefined
-    signalNand _ Undefined = Undefined
     signalNand High High = Low
     signalNand High Low = High
     signalNand Low High = High
     signalNand Low Low = High
 
-    apply : Component -> CircuitState
-    apply (Nand a b o) =
+    drive : Component -> CircuitState
+    drive (Nand a b o) =
       let as = lookupSignal a cstate
           bs = lookupSignal b cstate
       in case (as, bs) of
         (Just asig, Just bsig) => Valid . fromList $ [ (o, signalNand asig bsig) ]
         _ => Invalid
-    apply (One w) = Valid . fromList $ [ (w, High) ]
-    apply (Zero w) = Valid . fromList $ [ (w, Low) ]
-    apply (Observer _ w) = Valid . fromList $ [ (w, Undefined) ]
-    apply (Relay i o) =
+    drive (One w) = Valid . fromList $ [ (w, High) ]
+    drive (Zero w) = Valid . fromList $ [ (w, Low) ]
+    drive (Observer _ w) = Valid empty
+    drive (Relay i o) =
       case lookupSignal i cstate of
         Just isig => Valid . fromList $ [ (o, isig) ]
         Nothing => Invalid
-    apply (Boot w) = Valid empty
+    drive (Boot w) = Valid empty
 
 Observations : Type
-Observations = SortedMap String Signal
+Observations = List (String, Signal)
 
 getObservations : Circuit -> CircuitState -> Observations
-getObservations comps (Valid cstate) = fromList . concatMap ob $ comps
+getObservations comps (Valid cstate) = concatMap ob $ comps
   where
     ob : Component -> List (String, Signal)
     ob (Observer tag w) =
@@ -248,18 +290,18 @@ getObservations comps (Valid cstate) = fromList . concatMap ob $ comps
         Just sig => [ (tag, sig) ]
         Nothing => []
     ob _ = []
-getObservations _ Invalid = empty
+getObservations _ Invalid = []
 
 putObservationsLn : Observations -> IO ()
-putObservationsLn = (>> putChar '\n') . traverse f . toList
+putObservationsLn = (>> putChar '\n') . traverse f 
   where
     f : (String, Signal) -> IO ()
     f (tag, sig) = putStr $ tag ++ "=" ++ show sig ++ ", "
 
 exampleAdder : Circuit
 exampleAdder = runCircuitBuilder $ do
-  const2 <- boolToWire [ False, True, False, False, False, False, False, False ]
-  const3 <- boolToWire [ True, True, False, False, False, False, False, False ]
+  const2 <- binsToConsts [ 0, 1, 0, 0, 0, 0, 0, 0 ]
+  const3 <- binsToConsts [ 1, 1, 0, 0, 0, 0, 0, 0 ]
   (shouldBe5, shouldBe0) <- byteAdder const2 const3 !zero
   let indexed5 = zipWith (,) shouldBe5 (count 8)
   traverse (\(w, n) => observe ("out[" ++ show n ++ "]") w) indexed5
@@ -270,7 +312,23 @@ exampleClock n = runCircuitBuilder $ do
   c <- clock n
   observe "clock" c
 
+exampleLatch : Circuit
+exampleLatch = runCircuitBuilder $ do
+  clk <- clock 10
+  observe "clk" clk
+  (q, nq) <- gatedDLatch clk !one
+  observe "q" q
+  observe "~q" nq
+
+exampleDff : Circuit
+exampleDff = runCircuitBuilder $ do
+  clk <- clock 20
+  d <- clock 40
+  observe "clk" clk
+  observe "d" d
+  dFlipFlop d clk >>= observe "dn"
+
 main : IO ()
 main =
-  let exm = exampleClock 5
-  in map (const ()) . traverse (putObservationsLn . getObservations exm) . iterateN 50 (runCircuit exm) . initialState $ exm
+  let exm = exampleDff
+  in map (const ()) . traverse (putObservationsLn . getObservations exm) . iterateN 200 (runCircuit exm) . initialState $ exm
