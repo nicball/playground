@@ -25,7 +25,7 @@ data Component : Type where
   Zero : (alwaysZero : Wire) -> Component
   Observer : (tag : String) -> Wire -> Component
   Relay : (in' : Wire) -> (out : Wire) -> Component
-  Boot : Wire -> Component
+  -- Boot : Wire -> Component
 
 Show Component where
   show (Nand a b o) = show o ++ "=" ++ "~(" ++ show a ++ "&" ++ show b ++ ")"
@@ -33,7 +33,7 @@ Show Component where
   show (Zero w) = show w ++ "=0"
   show (Observer tag w) = tag ++ "=" ++ show w
   show (Relay i o) = show o ++ "=" ++ show i
-  show (Boot w) = show w ++ "=<boot>"
+  -- show (Boot w) = show w ++ "=<boot>"
 
 Circuit : Type
 Circuit = List Component
@@ -72,12 +72,15 @@ relay : Wire -> CircuitBuilder Wire
 relay w = combinatorial \out =>
   pure [ Relay w out ]
 
+relay_ : Wire -> Wire -> CircuitBuilder ()
+relay_ i o = addComponents [ Relay i o ]
+
 delay : Nat -> Wire -> CircuitBuilder Wire
 delay 0 w = pure w
 delay (S k) w = relay w >>= delay k
 
-boot : Wire -> CircuitBuilder ()
-boot w = addComponents [ Boot w ]
+-- boot : Wire -> CircuitBuilder ()
+-- boot w = addComponents [ Boot w ]
 
 nand : Wire -> Wire -> CircuitBuilder Wire
 nand a b = combinatorial \out =>
@@ -159,11 +162,11 @@ binsToConsts = traverse \b =>
     1 => one
     0 => zero
 
-binsToBootedWires : Vect n (Fin 2) -> CircuitBuilder (Vect n Wire)
-binsToBootedWires = traverse \b => do
-  w <- newWire
-  if b == 1 then boot w else pure ()
-  pure w
+-- binsToBootedWires : Vect n (Fin 2) -> CircuitBuilder (Vect n Wire)
+-- binsToBootedWires = traverse \b => do
+--   w <- newWire
+--   if b == 1 then boot w else pure ()
+--   pure w
 
 clock : (halfWidthMinusOne : Nat) -> CircuitBuilder Wire
 clock n = do
@@ -177,8 +180,8 @@ gatedSRLatch_ : (set : Wire) -> (reset : Wire) -> (enable : Wire)
 gatedSRLatch_ s r e q nq= do
   s' <- and s e
   r' <- and r e
-  nand_ r' nq q
-  nand_ s' q nq
+  nor_ r' nq q
+  nor_ s' q nq
   pure ()
 
 gatedSRLatch : (set : Wire) -> (reset : Wire) -> (enable : Wire) -> CircuitBuilder (Wire, Wire)
@@ -247,7 +250,7 @@ initialState = concat . map toMap
     toMap (Zero w) = Valid . fromList $ [ (w, Low) ]
     toMap (Observer _ w) = Valid . fromList $ [ (w, Low) ]
     toMap (Relay i o) = Valid . fromList $ [ (i, Low), (o, Low) ]
-    toMap (Boot w) = Valid . fromList $ [ (w, High) ]
+    -- toMap (Boot w) = Valid . fromList $ [ (w, High) ]
 
 count : (n : Nat) -> Vect n Nat
 count 0 = Nil
@@ -276,7 +279,7 @@ runCircuit comps cstate = concat . map drive $ comps
       case lookupSignal i cstate of
         Just isig => Valid . fromList $ [ (o, isig) ]
         Nothing => Invalid
-    drive (Boot w) = Valid empty
+    -- drive (Boot w) = Valid empty
 
 Observations : Type
 Observations = List (String, Signal)
@@ -314,19 +317,15 @@ exampleClock n = runCircuitBuilder $ do
 
 exampleLatch : Circuit
 exampleLatch = runCircuitBuilder $ do
-  clk <- clock 10
-  observe "clk" clk
-  (q, nq) <- gatedDLatch clk !one
+  (q, nq) <- gatedSRLatch !zero !one !one
   observe "q" q
   observe "~q" nq
 
 exampleDff : Circuit
 exampleDff = runCircuitBuilder $ do
-  clk <- clock 20
-  d <- clock 40
+  clk <- clock 40
   observe "clk" clk
-  observe "d" d
-  dFlipFlop d clk >>= observe "dn"
+  dFlipFlop !one clk >>= observe "dn"
 
 main : IO ()
 main =
