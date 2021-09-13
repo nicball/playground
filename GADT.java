@@ -101,32 +101,37 @@ data Ast a
 */
 
 interface Ast<A> extends
-    Sum< Ast.IntA<A>,
-        Sum< Ast.IdA<A>,
-            Sum< Ast.LamA<?, ?, A>,
-                Ast.AppA<?, A>>>> {
+    Sum< Product<Equal<A, Integer>, Integer>,
+        Sum< Integer,
+            Sum< Ast.LamAData<?, ?, A>,
+                Ast.AppAData<?, A>>>> {
 
-    static class IntA<A> extends Sum.Left<Ast.IntA<A>, Sum< Ast.IdA<A>, Sum< Ast.LamA<?, ?, A>, Ast.AppA<?, A>>>> implements Ast<A> {
-        public Equal<A, Integer> _eq;
-        public int value;
-        public IntA(Equal<A, Integer> eq, int value) { super(this); _eq = eq; this.value = value; }
+    static class IntA<A> extends Sum.Left<Product<Equal<A, Integer>, Integer>, Sum<Integer, Sum<LamAData<?, ?, A>, AppAData<?, A>>>> implements Ast<A> {
+        public IntA(Equal<A, Integer> eq, int value) { super(Product.pack(eq, value)); }
     }
 
-    static class IdA<A> implements Ast<A> {
-        public int index;
-        public IdA(int index) { this.index = index; }
+    static class IdA<A> extends Sum.Right<Product<Equal<A, Integer>, Integer>, Sum<Integer, Sum<LamAData<?, ?, A>, AppAData<?, A>>>> implements Ast<A> {
+        public IdA(int index) { super(Sum.left(index)); }
     }
 
-    static class LamA<A, B, F> implements Ast<F> {
+    static class LamA<A, B, F> extends Sum.Right<Product<Equal<F, Integer>, Integer>, Sum<Integer, Sum<LamAData<?, ?, F>, AppAData<?, F>>>> implements Ast<F> {
+        public LamA(Equal<F, Function<A, B>> eq, Ast<B> body) { super(Sum.right(Sum.left(new LamAData(eq, body)))); }
+    }
+
+    static class AppA<A, B> extends Sum.Right<Product<Equal<B, Integer>, Integer>, Sum<Integer, Sum<LamAData<?, ?, B>, AppAData<?, B>>>> implements Ast<B> {
+        public AppA(Ast<Function<A, B>> fn, Ast<A> arg) { super(Sum.right(Sum.right(new AppAData(fn, arg)))); }
+    }
+
+    static class LamAData<A, B, F> {
         public Equal<F, Function<A, B>> _eq;
         public Ast<B> body;
-        public LamA(Equal<F, Function<A, B>> eq, Ast<B> body) { _eq = eq; this.body = body; }
+        public LamAData(Equal<F, Function<A, B>> eq, Ast<B> body) { _eq = eq; this.body = body; }
     }
 
-    static class AppA<A, B> implements Ast<B> {
+    static class AppAData<A, B> {
         public Ast<Function<A, B>> fn;
         public Ast<A> arg;
-        public AppA(Ast<Function<A, B>> fn, Ast<A> arg) { this.fn = fn; this.arg = arg; }
+        public AppAData(Ast<Function<A, B>> fn, Ast<A> arg) { this.fn = fn; this.arg = arg; }
     }
 }
 
