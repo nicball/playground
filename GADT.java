@@ -138,14 +138,14 @@ class Hello {
         System.out.println(
             Option.some("Hello World!").option(
                 "Impossible!",
-                (s) -> { return "Of course!"; }
+                (s) -> "Of course!"
             )
         );
         Sum<Void, Integer> justInt = Sum.right(42);
         System.out.println(
             justInt.<Integer>match(
-                (v) -> { return v.absurd(); },
-                (i) -> { return i; }
+                Void::absurd,
+                (i) -> i
             )
         );
     }
