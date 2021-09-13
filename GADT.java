@@ -122,16 +122,12 @@ interface Ast<A> extends
         public AppA(Ast<Function<A, B>> fn, Ast<A> arg) { super(Sum.right(Sum.right(new AppAData(fn, arg)))); }
     }
 
-    static class LamAData<A, B, F> {
-        public Equal<F, Function<A, B>> _eq;
-        public Ast<B> body;
-        public LamAData(Equal<F, Function<A, B>> eq, Ast<B> body) { _eq = eq; this.body = body; }
+    static class LamAData<A, B, F> extends Product.Pack<Equal<F, Function<A, B>>, Ast<B>> {
+        public LamAData(Equal<F, Function<A, B>> eq, Ast<B> body) { super(eq, body); }
     }
 
-    static class AppAData<A, B> {
-        public Ast<Function<A, B>> fn;
-        public Ast<A> arg;
-        public AppAData(Ast<Function<A, B>> fn, Ast<A> arg) { this.fn = fn; this.arg = arg; }
+    static class AppAData<A, B> extends Product.Pack<Ast<Function<A, B>>, Ast<A>> {
+        public AppAData(Ast<Function<A, B>> fn, Ast<A> arg) { super(fn, arg); }
     }
 }
 
