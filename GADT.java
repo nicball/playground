@@ -98,6 +98,12 @@ data Ast a
     | IdA Int
     | forall x y. (a ~ (x -> y)) => LamA (Ast y)
     | forall x. AppA (Ast (x -> a)) (Ast x)
+
+data Ast a
+    = IntA (a :~: Int, Int)
+    | IdA Int
+    | LamA (exists x y. (a :~: (x -> y), Ast y))
+    | AppA (exists x. (Ast (x -> a), Ast x))
 */
 
 interface Ast<A> extends
