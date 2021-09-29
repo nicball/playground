@@ -77,7 +77,7 @@ main = do
   -- mapM_ print {-. sortOn (snd . snd)-} . fmap (\n -> (n, ) . last . invest (buyNths True [n]) $ hist) $ [0 .. Map.size (head hist) - 1]
   -- mapM_ print . invest (buyNths True [1]) $ hist
   -- mapM_ print . fmap (\n -> (n,) . numRises . invest (buyNths True [n]) $ hist) $ [0 .. Map.size (head hist) - 1]
-  mapM_ print . invest hothead $ hist
+  mapM_ print . invest coldhead $ hist
   where
     numRises trace = length . filter (> 0) . fmap (uncurry (-)) . zip (tail ns) $ ns
       where
