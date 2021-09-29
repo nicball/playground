@@ -8,6 +8,7 @@ import Control.Concurrent.MVar
 import Control.Exception
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Cont
+import Data.Foldable (traverse_)
 import Data.Proxy
 
 class Monad m => Async m where
@@ -15,33 +16,37 @@ class Monad m => Async m where
   suspend :: ((a -> IO ()) -> IO ()) -> m a
   nowait :: IO a -> m a
 
-data Future a = Future
-  { _result :: MVar a
-  , _awaiters :: MVar [a -> IO ()]
-  , _mutex :: MVar ()
-  }
+newtype Future a = Future (MVar (FutureState a))
+
+data FutureState a
+  = Pending [a -> IO ()]
+  | Fulfilled a
 
 data FutureFulfilledException = FutureFulfilledException
-  deriving Show
+  deriving (Show)
 
 instance Exception FutureFulfilledException
 
 emptyFuture :: IO (Future a)
-emptyFuture = Future <$> newEmptyMVar <*> newMVar [] <*> newMVar ()
+emptyFuture = Future <$> newMVar (Pending [])
 
 fulfill :: Future a -> a -> IO ()
-fulfill future result = withMVar (_mutex future) \_ -> do
-  ok <- tryPutMVar (_result future) result
-  if not ok then throwIO FutureFulfilledException else pure ()
-  takeMVar (_awaiters future) >>= mapM_ ($ result)
+fulfill (Future fstateVar) result = do
+  fstate <- takeMVar fstateVar
+  case fstate of
+    Pending awaiters -> do
+      putMVar fstateVar (Fulfilled result)
+      traverse_ ($ result) awaiters
+    Fulfilled a -> do
+      putMVar fstateVar (Fulfilled a)
+      throwIO FutureFulfilledException
 
 getFuture :: Async m => Future a -> m a
-getFuture future = do
-  nowait $ takeMVar (_mutex future)
-  res <- nowait $ tryReadMVar (_result future)
+getFuture (Future fstateVar) = do
+  res <- nowait $ takeMVar fstateVar
   case res of
-    Just r -> nowait (putMVar (_mutex future) ()) >> pure r
-    Nothing -> suspend \k -> modifyMVar_ (_awaiters future) (pure . (k :)) >> putMVar (_mutex future) ()
+    Fulfilled r -> nowait (putMVar fstateVar (Fulfilled r)) >> pure r
+    Pending awaiters -> suspend $ putMVar fstateVar . Pending . (: awaiters)
 
 newtype ThreadAsync a = ThreadAsync (IO a)
   deriving (Functor, Applicative, Monad)
@@ -71,7 +76,7 @@ asyncWork finish = do
   nowait (putMVar finish ())
 
 readFileAsync :: Async m => FilePath -> m String
-readFileAsync path = suspend ((pure () <*) . forkIO . (readFile path >>=))
+readFileAsync path = suspend ((pure () <*) . forkIO . (readFile path >>=)) -- forkIO here means any other runtime
 
 main :: IO ()
 main = do
