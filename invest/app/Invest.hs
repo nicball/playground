@@ -1,7 +1,7 @@
 module Invest (investPrint) where
 
 import Control.Arrow ((***))
-import Data.List (sortOn, groupBy)
+import Data.List (groupBy, sortOn)
 import Data.Map.Strict (Map, (!))
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
@@ -53,8 +53,7 @@ smarterColdhead = buyNths True [0 .. 3]
 invest :: Strategy -> MarketHistory -> [([Text], Double)]
 invest strat hist =
   fmap (\(n, assets) -> (fmap fst assets, sellAll (hist !! n) assets))
-    . reverse
-    . scanr (((+ 1) ***) . ($)) (3, [("USDT", 10000)])
+    . scanl (flip (((+ 1) ***) . ($))) (3, [("USDT", 10000)])
     . fmap (uncurry strat)
     . drop 4
     . flip zip [0 ..]
