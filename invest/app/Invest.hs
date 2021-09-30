@@ -1,6 +1,8 @@
 module Invest (investPrint) where
 
 import Control.Arrow ((***))
+import Control.Lens (_2, view)
+import Data.Function (on)
 import Data.List (groupBy, sortOn)
 import Data.Map.Strict (Map, (!))
 import qualified Data.Map.Strict as Map
@@ -68,13 +70,13 @@ investPrint conn = do
           ( Map.fromList
               . fmap (\(a, _, b, c) -> (a, (b, c)))
           )
-          . groupBy (\(_, a, _, _) (_, b, _, _) -> a == b)
-          . sortOn (\(_, a, _, _) -> a)
+          . groupBy ((==) `on` view _2)
+          . sortOn (view _2)
           $ symtimeopenclose
   -- mapM_ print {-. sortOn (snd . snd)-} . fmap (\n -> (n, ) . last . invest (buyNths True [n]) $ hist) $ [0 .. Map.size (head hist) - 1]
   -- mapM_ print . invest (buyNths True [1]) $ hist
   -- mapM_ print . fmap (\n -> (n,) . numRises . invest (buyNths True [n]) $ hist) $ [0 .. Map.size (head hist) - 1]
-  mapM_ print . invest coldhead $ hist
+  mapM_ print . invest hothead $ hist
   where
     numRises trace = length . filter (> 0) . fmap (uncurry (-)) . zip (tail ns) $ ns
       where
