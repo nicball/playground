@@ -1,4 +1,4 @@
-module Invest where
+module Invest (investPrint) where
 
 import Control.Arrow ((***))
 import Data.List (sortOn, groupBy)
@@ -6,7 +6,7 @@ import Data.Map.Strict (Map, (!))
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Database.SQLite.Simple as SQL (open, query_)
+import Database.SQLite.Simple as SQL (Connection, query_)
 
 type Market = Map Text (Double, Double)
 
@@ -61,9 +61,8 @@ invest strat hist =
     . replicate (length (head hist))
     $ hist
 
-main :: IO ()
-main = do
-  conn <- SQL.open "market.db"
+investPrint :: Connection -> IO ()
+investPrint conn = do
   symtimeopenclose <- query_ conn "select symbol, time, open, close from market" :: IO [(Text, Integer, Double, Double)]
   let hist =
         fmap

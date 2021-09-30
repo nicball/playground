@@ -1,11 +1,13 @@
 module Main where
 
-import qualified GetData
-import qualified Invest
+import GetData
+import Invest
 import System.Directory (doesFileExist)
+import Database.SQLite.Simple as Sql (open)
 
 main :: IO ()
 main = do
   e <- doesFileExist "market.db"
-  if not e then GetData.main else pure ()
-  Invest.main
+  sql <- Sql.open "market.db"
+  if not e then getData sql else pure ()
+  investPrint sql
