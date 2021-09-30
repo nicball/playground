@@ -10,4 +10,4 @@ main = do
   e <- doesFileExist "market.db"
   sql <- Sql.open "market.db"
   if not e then getData sql else pure ()
-  investPrint sql
+  -- investPrint sql
