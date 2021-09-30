@@ -1,9 +1,11 @@
 module GetData (getData) where
 
-import Control.Lens (filtered, to, toListOf, (^..), (^?!), (%~), _1, folded, minimumOf, (-~))
+import Control.Lens (filtered, to, toListOf, (^..), (^?!), (%~), _1, folded, minimumOf, (-~), view)
 import Data.Aeson (Value)
 import Data.Aeson.Lens (key, nth, values, _String, _Integer)
 import Data.Foldable (traverse_)
+import Data.List (sortOn)
+import Data.Function (on)
 import Data.Text as Text (Text, isSuffixOf, pack, unpack)
 import Data.Maybe (fromJust)
 import Database.SQLite.Simple as Sql (Connection, executeMany, execute_, open, withExclusiveTransaction)
@@ -34,7 +36,11 @@ getKLines symbol = do
     toRead = to (read . Text.unpack)
 
 normalize :: [(Integer, Text, Double, Double)] -> [(Integer, Text, Double, Double)]
-normalize = ((fmap . (_1 -~)) =<< fromJust . minimumOf (folded . _1)) . fmap (_1 %~ (`div` (1000 * 3600)))
+normalize = offsetTime . coarserTime
+  where
+    offsetTime = (fmap . (_1 -~)) =<< fromJust . minimumOf (folded . _1)
+    coarserTime = fmap (_1 %~ (`div` (1000 * 3600)))
+    ensureBigMarket = concat . filter ((> 300) . length) . groupBy ((==) `on` (view _1)) . sortOn (view _1)
 
 getData :: Connection -> IO ()
 getData sqlConn = do
