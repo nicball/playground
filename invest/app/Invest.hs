@@ -22,8 +22,18 @@ sellAll :: Market -> Assets -> Double
 sellAll market = sum . fmap (\(sym, quant) -> if sym == "USDT" then quant else quant * fst (market ! sym))
 
 hothead :: Strategy
-hothead hist = buyNths False [Map.size (head hist) - 1] hist
+hothead hist time assets =
+  let
+    currMarket = hist !! time
+    myMoney = sellAll currMarket assets
+    lastOpen = fst (hist !! (time - 1) ! "BTCUSDT")
+    lastClose = snd (hist !! (time - 1) ! "BTCUSDT")
+  in
+    if lastOpen < lastClose
+    then [("BTCUSDT", myMoney / fst (currMarket ! "BTCUSDT"))]
+    else [("USDT", myMoney)]
 
+{-
 coldhead :: Strategy
 coldhead = buyNths True [0]
 
@@ -51,15 +61,16 @@ smarterHothead hist time assets =
 
 smarterColdhead :: Strategy
 smarterColdhead = buyNths True [0 .. 3]
+-}
 
 invest :: Strategy -> MarketHistory -> [([Text], Double)]
 invest strat hist =
   fmap (\(n, assets) -> (fmap fst assets, sellAll (hist !! n) assets))
     . scanl (flip (((+ 1) ***) . ($))) (3, [("USDT", 10000)])
     . fmap (uncurry strat)
-    . drop 4
+    . drop 1
     . flip zip [0 ..]
-    . replicate (length (head hist))
+    . replicate (length hist)
     $ hist
 
 investPrint :: Connection -> IO ()
