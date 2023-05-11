@@ -181,301 +181,75 @@ mul = Abs "add" (Abs "x" (Abs "y" (Rec (Var 0) Zero "e" "p" (App (App (Var 4) (V
 three :: Expr
 three = Succ (Succ (Succ Zero))
 
+recurseWithY :: Expr
+recurseWithY = App yc (Abs "add" (Abs "x" (Abs "y" (Rec (Var 0) (Var 1) "y-1" "_" (Succ (App (App (Var 4) (Var 3)) (Var 1)))))))
+
 main :: IO ()
-main = print yc
-  >> print three
-  >> trace (ForceNat 0 (App (App add Zero) three))
-  >> trace (ForceNat 0 (App (App (App mul add) three) three))
-  >> trace (Abs "_" (App (Abs "x" (App (Var 0) (Var 0))) (Abs "x" (App (Var 0) (Var 0)))))
+main
+  -- = print yc
+  -- >> print three
+  -- >> trace (ForceNat 0 (App (App add Zero) three))
+  -- >> trace (ForceNat 0 (App (App (App mul add) three) three))
+  -- >> trace (Abs "_" (App (Abs "x" (App (Var 0) (Var 0))) (Abs "x" (App (Var 0) (Var 0)))))
+  = trace (ForceNat 0 (App (App recurseWithY (Succ Zero)) (Succ Zero)))
 
 {-
 
-(f =>
-  ((x =>
-    (f (x x))
-  ) (x =>
-    (f (x x))
-  ))
-)
-3
 (force-nat 0
-  (((x =>
-    (y =>
-      (recurse on y
-        when 0 -> x
-        when succ e with p -> (1 + p)
+  ((((f =>
+    ((x =>
+      (f (x x))
+    ) (x =>
+      (f (x x))
+    ))
+  ) (add =>
+    (x =>
+      (y =>
+        (recurse on y
+          when 0 -> x
+          when succ y-1 with _ -> (1 + ((add x) y-1))
+        )
       )
     )
-  ) 0) 3))
+  )) 1) 1))
 {
 }
 
 (force-nat 0
-  ((y =>
-    (recurse on y
-      when 0 -> @0
-      when succ e with p -> (1 + p)
-    )
-  ) 3))
+  ((((x =>
+    (@0 (x x))
+  ) (x =>
+    (@0 (x x))
+  )) 1) 1))
 {
-  @0 = 0;
+  @0 = (add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
+        )
+      )
+    );
 }
 
 (force-nat 0
-  (recurse on @1
-    when 0 -> @0
-    when succ e with p -> (1 + p)
-  ))
+  (((@0 (@1 @1)) 1) 1))
 {
-  @1 = 3;
-  @0 = 0;
-}
-
-(force-nat 0
-  (recurse on @1
-    when 0 -> @0
-    when succ e with p -> (1 + p)
-  ))
-{
-  @1 = (1 + @2);
-  @2 = 2;
-  @0 = 0;
-}
-
-(force-nat 0
-  (recurse on (1 + @2)
-    when 0 -> @0
-    when succ e with p -> (1 + p)
-  ))
-{
-  @1 = (1 + @2);
-  @2 = 2;
-  @0 = 0;
-}
-
-(force-nat 0
-  (1 + @3))
-{
-  @3 = (recurse on @2
-      when 0 -> @0
-      when succ e with p -> (1 + p)
+  @1 = (x =>
+      (@0 (x x))
     );
-  @1 = (1 + @2);
-  @2 = 2;
-  @0 = 0;
-}
-
-(force-nat 1
-  @3)
-{
-  @3 = (recurse on @2
-      when 0 -> @0
-      when succ e with p -> (1 + p)
+  @0 = (add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
+        )
+      )
     );
-  @1 = (1 + @2);
-  @2 = 2;
-  @0 = 0;
-}
-
-(force-nat 1
-  @3)
-{
-  @3 = (recurse on @2
-      when 0 -> @0
-      when succ e with p -> (1 + p)
-    );
-  @2 = (1 + @4);
-  @4 = 1;
-  @1 = (1 + @2);
-  @0 = 0;
-}
-
-(force-nat 1
-  @3)
-{
-  @3 = (recurse on (1 + @4)
-      when 0 -> @0
-      when succ e with p -> (1 + p)
-    );
-  @2 = (1 + @4);
-  @4 = 1;
-  @1 = (1 + @2);
-  @0 = 0;
-}
-
-(force-nat 1
-  @3)
-{
-  @3 = (1 + @5);
-  @5 = (recurse on @4
-      when 0 -> @0
-      when succ e with p -> (1 + p)
-    );
-  @2 = (1 + @4);
-  @4 = 1;
-  @1 = (1 + @2);
-  @0 = 0;
-}
-
-(force-nat 1
-  (1 + @5))
-{
-  @3 = (1 + @5);
-  @5 = (recurse on @4
-      when 0 -> @0
-      when succ e with p -> (1 + p)
-    );
-  @2 = (1 + @4);
-  @4 = 1;
-  @1 = (1 + @2);
-  @0 = 0;
-}
-
-(force-nat 2
-  @5)
-{
-  @3 = (1 + @5);
-  @5 = (recurse on @4
-      when 0 -> @0
-      when succ e with p -> (1 + p)
-    );
-  @2 = (1 + @4);
-  @4 = 1;
-  @1 = (1 + @2);
-  @0 = 0;
-}
-
-(force-nat 2
-  @5)
-{
-  @5 = (recurse on @4
-      when 0 -> @0
-      when succ e with p -> (1 + p)
-    );
-  @4 = (1 + @6);
-  @6 = 0;
-  @3 = (1 + @5);
-  @2 = (1 + @4);
-  @1 = (1 + @2);
-  @0 = 0;
-}
-
-(force-nat 2
-  @5)
-{
-  @5 = (recurse on (1 + @6)
-      when 0 -> @0
-      when succ e with p -> (1 + p)
-    );
-  @4 = (1 + @6);
-  @6 = 0;
-  @3 = (1 + @5);
-  @2 = (1 + @4);
-  @1 = (1 + @2);
-  @0 = 0;
-}
-
-(force-nat 2
-  @5)
-{
-  @5 = (1 + @7);
-  @7 = (recurse on @6
-      when 0 -> @0
-      when succ e with p -> (1 + p)
-    );
-  @4 = (1 + @6);
-  @6 = 0;
-  @3 = (1 + @5);
-  @2 = (1 + @4);
-  @1 = (1 + @2);
-  @0 = 0;
-}
-
-(force-nat 2
-  (1 + @7))
-{
-  @5 = (1 + @7);
-  @7 = (recurse on @6
-      when 0 -> @0
-      when succ e with p -> (1 + p)
-    );
-  @4 = (1 + @6);
-  @6 = 0;
-  @3 = (1 + @5);
-  @2 = (1 + @4);
-  @1 = (1 + @2);
-  @0 = 0;
-}
-
-(force-nat 3
-  @7)
-{
-  @5 = (1 + @7);
-  @7 = (recurse on @6
-      when 0 -> @0
-      when succ e with p -> (1 + p)
-    );
-  @4 = (1 + @6);
-  @6 = 0;
-  @3 = (1 + @5);
-  @2 = (1 + @4);
-  @1 = (1 + @2);
-  @0 = 0;
-}
-
-(force-nat 3
-  @7)
-{
-  @7 = (recurse on 0
-      when 0 -> @0
-      when succ e with p -> (1 + p)
-    );
-  @5 = (1 + @7);
-  @4 = (1 + @6);
-  @6 = 0;
-  @3 = (1 + @5);
-  @2 = (1 + @4);
-  @1 = (1 + @2);
-  @0 = 0;
-}
-
-(force-nat 3
-  @7)
-{
-  @7 = @0;
-  @5 = (1 + @7);
-  @4 = (1 + @6);
-  @6 = 0;
-  @3 = (1 + @5);
-  @2 = (1 + @4);
-  @1 = (1 + @2);
-  @0 = 0;
-}
-
-(force-nat 3
-  @7)
-{
-  @7 = 0;
-  @5 = (1 + @7);
-  @4 = (1 + @6);
-  @6 = 0;
-  @3 = (1 + @5);
-  @2 = (1 + @4);
-  @1 = (1 + @2);
-  @0 = 0;
-}
-
-(force-nat 3
-  0)
-{
-  @7 = 0;
-  @5 = (1 + @7);
-  @4 = (1 + @6);
-  @6 = 0;
-  @3 = (1 + @5);
-  @2 = (1 + @4);
-  @1 = (1 + @2);
-  @0 = 0;
 }
 
 (force-nat 0
@@ -483,132 +257,23 @@ main = print yc
     (x =>
       (y =>
         (recurse on y
-          when 0 -> 0
-          when succ e with p -> ((add p) x)
+          when 0 -> x
+          when succ y-1 with _ -> (1 + ((add x) y-1))
         )
       )
     )
-  ) (x =>
-    (y =>
-      (recurse on y
-        when 0 -> x
-        when succ e with p -> (1 + p)
-      )
-    )
-  )) 3) 3))
+  ) (@1 @1)) 1) 1))
 {
-}
-
-(force-nat 0
-  (((x =>
-    (y =>
-      (recurse on y
-        when 0 -> 0
-        when succ e with p -> ((@0 p) x)
-      )
-    )
-  ) 3) 3))
-{
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
+  @1 = (x =>
+      (@0 (x x))
     );
-}
-
-(force-nat 0
-  ((y =>
-    (recurse on y
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    )
-  ) 3))
-{
-  @1 = 3;
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 0
-  (recurse on @2
-    when 0 -> 0
-    when succ e with p -> ((@0 p) @1)
-  ))
-{
-  @2 = 3;
-  @1 = 3;
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 0
-  (recurse on @2
-    when 0 -> 0
-    when succ e with p -> ((@0 p) @1)
-  ))
-{
-  @2 = (1 + @3);
-  @3 = 2;
-  @1 = 3;
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 0
-  (recurse on (1 + @3)
-    when 0 -> 0
-    when succ e with p -> ((@0 p) @1)
-  ))
-{
-  @2 = (1 + @3);
-  @3 = 2;
-  @1 = 3;
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 0
-  ((@0 @4) @1))
-{
-  @4 = (recurse on @3
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @2 = (1 + @3);
-  @3 = 2;
-  @1 = 3;
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
+  @0 = (add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
         )
       )
     );
@@ -619,23 +284,22 @@ main = print yc
     (y =>
       (recurse on y
         when 0 -> x
-        when succ e with p -> (1 + p)
+        when succ y-1 with _ -> (1 + ((@2 x) y-1))
       )
     )
-  ) @4) @1))
+  ) 1) 1))
 {
-  @4 = (recurse on @3
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
+  @2 = (@1 @1);
+  @1 = (x =>
+      (@0 (x x))
     );
-  @2 = (1 + @3);
-  @3 = 2;
-  @1 = 3;
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
+  @0 = (add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
         )
       )
     );
@@ -644,2542 +308,708 @@ main = print yc
 (force-nat 0
   ((y =>
     (recurse on y
-      when 0 -> @5
-      when succ e with p -> (1 + p)
+      when 0 -> @3
+      when succ y-1 with _ -> (1 + ((@2 @3) y-1))
     )
-  ) @1))
+  ) 1))
 {
-  @5 = @4;
-  @4 = (recurse on @3
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
+  @3 = 1;
+  @2 = (@1 @1);
+  @1 = (x =>
+      (@0 (x x))
     );
-  @2 = (1 + @3);
-  @3 = 2;
-  @1 = 3;
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
+  @0 = (add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
         )
       )
     );
 }
 
 (force-nat 0
-  (recurse on @6
-    when 0 -> @5
-    when succ e with p -> (1 + p)
+  (recurse on @4
+    when 0 -> @3
+    when succ y-1 with _ -> (1 + ((@2 @3) y-1))
   ))
 {
-  @6 = @1;
-  @5 = @4;
-  @4 = (recurse on @3
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
+  @4 = 1;
+  @3 = 1;
+  @2 = (@1 @1);
+  @1 = (x =>
+      (@0 (x x))
     );
-  @2 = (1 + @3);
-  @3 = 2;
-  @1 = 3;
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
+  @0 = (add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
         )
       )
     );
 }
 
 (force-nat 0
-  (recurse on @6
-    when 0 -> @5
-    when succ e with p -> (1 + p)
+  (recurse on @4
+    when 0 -> @3
+    when succ y-1 with _ -> (1 + ((@2 @3) y-1))
   ))
 {
-  @6 = @1;
-  @1 = (1 + @7);
-  @7 = 2;
-  @5 = @4;
-  @4 = (recurse on @3
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
+  @4 = (1 + @5);
+  @5 = 0;
+  @3 = 1;
+  @2 = (@1 @1);
+  @1 = (x =>
+      (@0 (x x))
     );
-  @2 = (1 + @3);
-  @3 = 2;
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
+  @0 = (add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
         )
       )
     );
 }
 
 (force-nat 0
-  (recurse on @6
-    when 0 -> @5
-    when succ e with p -> (1 + p)
+  (recurse on (1 + @5)
+    when 0 -> @3
+    when succ y-1 with _ -> (1 + ((@2 @3) y-1))
   ))
 {
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @7 = 2;
-  @5 = @4;
-  @4 = (recurse on @3
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
+  @4 = (1 + @5);
+  @5 = 0;
+  @3 = 1;
+  @2 = (@1 @1);
+  @1 = (x =>
+      (@0 (x x))
     );
-  @2 = (1 + @3);
-  @3 = 2;
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
+  @0 = (add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
         )
       )
     );
 }
 
 (force-nat 0
-  (recurse on (1 + @7)
-    when 0 -> @5
-    when succ e with p -> (1 + p)
-  ))
+  (1 + ((@2 @3) @5)))
 {
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @7 = 2;
-  @5 = @4;
-  @4 = (recurse on @3
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
+  @6 = (recurse on @5
+      when 0 -> @3
+      when succ y-1 with _ -> (1 + ((@2 @3) y-1))
     );
-  @2 = (1 + @3);
-  @3 = 2;
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
+  @4 = (1 + @5);
+  @5 = 0;
+  @3 = 1;
+  @2 = (@1 @1);
+  @1 = (x =>
+      (@0 (x x))
     );
-}
-
-(force-nat 0
-  (1 + @8))
-{
-  @8 = (recurse on @7
-      when 0 -> @5
-      when succ e with p -> (1 + p)
-    );
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @7 = 2;
-  @5 = @4;
-  @4 = (recurse on @3
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @2 = (1 + @3);
-  @3 = 2;
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
+  @0 = (add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
         )
       )
     );
 }
 
 (force-nat 1
-  @8)
+  ((@2 @3) @5))
 {
-  @8 = (recurse on @7
-      when 0 -> @5
-      when succ e with p -> (1 + p)
+  @6 = (recurse on @5
+      when 0 -> @3
+      when succ y-1 with _ -> (1 + ((@2 @3) y-1))
     );
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @7 = 2;
-  @5 = @4;
-  @4 = (recurse on @3
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
+  @4 = (1 + @5);
+  @5 = 0;
+  @3 = 1;
+  @2 = (@1 @1);
+  @1 = (x =>
+      (@0 (x x))
     );
-  @2 = (1 + @3);
-  @3 = 2;
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
+  @0 = (add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
         )
       )
     );
 }
 
 (force-nat 1
-  @8)
+  ((@2 @3) @5))
 {
-  @8 = (recurse on @7
-      when 0 -> @5
-      when succ e with p -> (1 + p)
-    );
-  @7 = (1 + @9);
-  @9 = 1;
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @5 = @4;
-  @4 = (recurse on @3
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @2 = (1 + @3);
-  @3 = 2;
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 1
-  @8)
-{
-  @8 = (recurse on (1 + @9)
-      when 0 -> @5
-      when succ e with p -> (1 + p)
-    );
-  @7 = (1 + @9);
-  @9 = 1;
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @5 = @4;
-  @4 = (recurse on @3
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @2 = (1 + @3);
-  @3 = 2;
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 1
-  @8)
-{
-  @8 = (1 + @10);
-  @10 = (recurse on @9
-      when 0 -> @5
-      when succ e with p -> (1 + p)
-    );
-  @7 = (1 + @9);
-  @9 = 1;
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @5 = @4;
-  @4 = (recurse on @3
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @2 = (1 + @3);
-  @3 = 2;
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 1
-  (1 + @10))
-{
-  @8 = (1 + @10);
-  @10 = (recurse on @9
-      when 0 -> @5
-      when succ e with p -> (1 + p)
-    );
-  @7 = (1 + @9);
-  @9 = 1;
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @5 = @4;
-  @4 = (recurse on @3
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @2 = (1 + @3);
-  @3 = 2;
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 2
-  @10)
-{
-  @8 = (1 + @10);
-  @10 = (recurse on @9
-      when 0 -> @5
-      when succ e with p -> (1 + p)
-    );
-  @7 = (1 + @9);
-  @9 = 1;
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @5 = @4;
-  @4 = (recurse on @3
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @2 = (1 + @3);
-  @3 = 2;
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 2
-  @10)
-{
-  @10 = (recurse on @9
-      when 0 -> @5
-      when succ e with p -> (1 + p)
-    );
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @5 = @4;
-  @4 = (recurse on @3
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @2 = (1 + @3);
-  @3 = 2;
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 2
-  @10)
-{
-  @10 = (recurse on (1 + @11)
-      when 0 -> @5
-      when succ e with p -> (1 + p)
-    );
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @5 = @4;
-  @4 = (recurse on @3
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @2 = (1 + @3);
-  @3 = 2;
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 2
-  @10)
-{
-  @10 = (1 + @12);
-  @12 = (recurse on @11
-      when 0 -> @5
-      when succ e with p -> (1 + p)
-    );
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @5 = @4;
-  @4 = (recurse on @3
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @2 = (1 + @3);
-  @3 = 2;
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 2
-  (1 + @12))
-{
-  @10 = (1 + @12);
-  @12 = (recurse on @11
-      when 0 -> @5
-      when succ e with p -> (1 + p)
-    );
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @5 = @4;
-  @4 = (recurse on @3
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @2 = (1 + @3);
-  @3 = 2;
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 3
-  @12)
-{
-  @10 = (1 + @12);
-  @12 = (recurse on @11
-      when 0 -> @5
-      when succ e with p -> (1 + p)
-    );
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @5 = @4;
-  @4 = (recurse on @3
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @2 = (1 + @3);
-  @3 = 2;
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 3
-  @12)
-{
-  @12 = (recurse on 0
-      when 0 -> @5
-      when succ e with p -> (1 + p)
-    );
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @5 = @4;
-  @4 = (recurse on @3
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @2 = (1 + @3);
-  @3 = 2;
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 3
-  @12)
-{
-  @12 = @5;
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @5 = @4;
-  @4 = (recurse on @3
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @2 = (1 + @3);
-  @3 = 2;
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 3
-  @12)
-{
-  @12 = @5;
-  @5 = @4;
-  @4 = (recurse on @3
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @3 = (1 + @13);
-  @13 = 1;
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 3
-  @12)
-{
-  @12 = @5;
-  @5 = @4;
-  @4 = (recurse on (1 + @13)
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @3 = (1 + @13);
-  @13 = 1;
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 3
-  @12)
-{
-  @12 = @5;
-  @5 = @4;
-  @4 = ((@0 @14) @1);
-  @14 = (recurse on @13
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @3 = (1 + @13);
-  @13 = 1;
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 3
-  @12)
-{
-  @12 = @5;
-  @5 = @4;
-  @4 = (((x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    ) @14) @1);
-  @14 = (recurse on @13
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @3 = (1 + @13);
-  @13 = 1;
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 3
-  @12)
-{
-  @12 = @5;
-  @5 = @4;
-  @4 = ((y =>
-      (recurse on y
-        when 0 -> @15
-        when succ e with p -> (1 + p)
-      )
+  @2 = ((x =>
+      (@0 (x x))
     ) @1);
-  @15 = @14;
-  @14 = (recurse on @13
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
+  @6 = (recurse on @5
+      when 0 -> @3
+      when succ y-1 with _ -> (1 + ((@2 @3) y-1))
     );
-  @3 = (1 + @13);
-  @13 = 1;
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
+  @4 = (1 + @5);
+  @5 = 0;
+  @3 = 1;
+  @1 = (x =>
+      (@0 (x x))
+    );
+  @0 = (add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
         )
       )
     );
 }
 
-(force-nat 3
-  @12)
+(force-nat 1
+  ((@2 @3) @5))
 {
-  @12 = @5;
-  @5 = @4;
-  @4 = (recurse on @16
-      when 0 -> @15
-      when succ e with p -> (1 + p)
+  @2 = (@0 (@7 @7));
+  @7 = @1;
+  @6 = (recurse on @5
+      when 0 -> @3
+      when succ y-1 with _ -> (1 + ((@2 @3) y-1))
     );
-  @16 = @1;
-  @15 = @14;
-  @14 = (recurse on @13
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
+  @4 = (1 + @5);
+  @5 = 0;
+  @3 = 1;
+  @1 = (x =>
+      (@0 (x x))
     );
-  @3 = (1 + @13);
-  @13 = 1;
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
+  @0 = (add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
         )
       )
     );
 }
 
-(force-nat 3
-  @12)
+(force-nat 1
+  ((@2 @3) @5))
 {
-  @12 = @5;
-  @5 = @4;
-  @4 = (recurse on @16
-      when 0 -> @15
-      when succ e with p -> (1 + p)
+  @2 = ((add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
+        )
+      )
+    ) (@7 @7));
+  @7 = @1;
+  @6 = (recurse on @5
+      when 0 -> @3
+      when succ y-1 with _ -> (1 + ((@2 @3) y-1))
     );
-  @16 = (1 + @7);
-  @15 = @14;
-  @14 = (recurse on @13
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
+  @4 = (1 + @5);
+  @5 = 0;
+  @3 = 1;
+  @1 = (x =>
+      (@0 (x x))
     );
-  @3 = (1 + @13);
-  @13 = 1;
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
+  @0 = (add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
         )
       )
     );
 }
 
-(force-nat 3
-  @12)
+(force-nat 1
+  ((@2 @3) @5))
 {
-  @12 = @5;
-  @5 = @4;
-  @4 = (recurse on (1 + @7)
-      when 0 -> @15
-      when succ e with p -> (1 + p)
-    );
-  @16 = (1 + @7);
-  @15 = @14;
-  @14 = (recurse on @13
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @3 = (1 + @13);
-  @13 = 1;
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
+  @2 = (x =>
       (y =>
         (recurse on y
           when 0 -> x
-          when succ e with p -> (1 + p)
+          when succ y-1 with _ -> (1 + ((@8 x) y-1))
+        )
+      )
+    );
+  @8 = (@7 @7);
+  @7 = @1;
+  @6 = (recurse on @5
+      when 0 -> @3
+      when succ y-1 with _ -> (1 + ((@2 @3) y-1))
+    );
+  @4 = (1 + @5);
+  @5 = 0;
+  @3 = 1;
+  @1 = (x =>
+      (@0 (x x))
+    );
+  @0 = (add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
         )
       )
     );
 }
 
-(force-nat 3
-  @12)
-{
-  @12 = @5;
-  @5 = @4;
-  @4 = (1 + @17);
-  @17 = (recurse on @7
-      when 0 -> @15
-      when succ e with p -> (1 + p)
-    );
-  @16 = (1 + @7);
-  @15 = @14;
-  @14 = (recurse on @13
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @3 = (1 + @13);
-  @13 = 1;
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 3
-  @12)
-{
-  @12 = @5;
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @17 = (recurse on @7
-      when 0 -> @15
-      when succ e with p -> (1 + p)
-    );
-  @16 = (1 + @7);
-  @15 = @14;
-  @14 = (recurse on @13
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @3 = (1 + @13);
-  @13 = 1;
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 3
-  @12)
-{
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @17 = (recurse on @7
-      when 0 -> @15
-      when succ e with p -> (1 + p)
-    );
-  @16 = (1 + @7);
-  @15 = @14;
-  @14 = (recurse on @13
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @3 = (1 + @13);
-  @13 = 1;
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 3
-  (1 + @17))
-{
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @17 = (recurse on @7
-      when 0 -> @15
-      when succ e with p -> (1 + p)
-    );
-  @16 = (1 + @7);
-  @15 = @14;
-  @14 = (recurse on @13
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @3 = (1 + @13);
-  @13 = 1;
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 4
-  @17)
-{
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @17 = (recurse on @7
-      when 0 -> @15
-      when succ e with p -> (1 + p)
-    );
-  @16 = (1 + @7);
-  @15 = @14;
-  @14 = (recurse on @13
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @3 = (1 + @13);
-  @13 = 1;
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 4
-  @17)
-{
-  @17 = (recurse on (1 + @9)
-      when 0 -> @15
-      when succ e with p -> (1 + p)
-    );
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @15 = @14;
-  @14 = (recurse on @13
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @3 = (1 + @13);
-  @13 = 1;
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 4
-  @17)
-{
-  @17 = (1 + @18);
-  @18 = (recurse on @9
-      when 0 -> @15
-      when succ e with p -> (1 + p)
-    );
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @15 = @14;
-  @14 = (recurse on @13
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @3 = (1 + @13);
-  @13 = 1;
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 4
-  (1 + @18))
-{
-  @17 = (1 + @18);
-  @18 = (recurse on @9
-      when 0 -> @15
-      when succ e with p -> (1 + p)
-    );
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @15 = @14;
-  @14 = (recurse on @13
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @3 = (1 + @13);
-  @13 = 1;
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 5
-  @18)
-{
-  @17 = (1 + @18);
-  @18 = (recurse on @9
-      when 0 -> @15
-      when succ e with p -> (1 + p)
-    );
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @15 = @14;
-  @14 = (recurse on @13
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @3 = (1 + @13);
-  @13 = 1;
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 5
-  @18)
-{
-  @18 = (recurse on (1 + @11)
-      when 0 -> @15
-      when succ e with p -> (1 + p)
-    );
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @15 = @14;
-  @14 = (recurse on @13
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @3 = (1 + @13);
-  @13 = 1;
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 5
-  @18)
-{
-  @18 = (1 + @19);
-  @19 = (recurse on @11
-      when 0 -> @15
-      when succ e with p -> (1 + p)
-    );
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @15 = @14;
-  @14 = (recurse on @13
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @3 = (1 + @13);
-  @13 = 1;
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 5
-  (1 + @19))
-{
-  @18 = (1 + @19);
-  @19 = (recurse on @11
-      when 0 -> @15
-      when succ e with p -> (1 + p)
-    );
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @15 = @14;
-  @14 = (recurse on @13
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @3 = (1 + @13);
-  @13 = 1;
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 6
-  @19)
-{
-  @18 = (1 + @19);
-  @19 = (recurse on @11
-      when 0 -> @15
-      when succ e with p -> (1 + p)
-    );
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @15 = @14;
-  @14 = (recurse on @13
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @3 = (1 + @13);
-  @13 = 1;
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 6
-  @19)
-{
-  @19 = (recurse on 0
-      when 0 -> @15
-      when succ e with p -> (1 + p)
-    );
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @15 = @14;
-  @14 = (recurse on @13
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @3 = (1 + @13);
-  @13 = 1;
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 6
-  @19)
-{
-  @19 = @15;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @15 = @14;
-  @14 = (recurse on @13
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @3 = (1 + @13);
-  @13 = 1;
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 6
-  @19)
-{
-  @19 = @15;
-  @15 = @14;
-  @14 = (recurse on @13
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 6
-  @19)
-{
-  @19 = @15;
-  @15 = @14;
-  @14 = (recurse on (1 + @20)
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 6
-  @19)
-{
-  @19 = @15;
-  @15 = @14;
-  @14 = ((@0 @21) @1);
-  @21 = (recurse on @20
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 6
-  @19)
-{
-  @19 = @15;
-  @15 = @14;
-  @14 = (((x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    ) @21) @1);
-  @21 = (recurse on @20
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 6
-  @19)
-{
-  @19 = @15;
-  @15 = @14;
-  @14 = ((y =>
+(force-nat 1
+  (((x =>
+    (y =>
       (recurse on y
-        when 0 -> @22
-        when succ e with p -> (1 + p)
+        when 0 -> x
+        when succ y-1 with _ -> (1 + ((@8 x) y-1))
       )
-    ) @1);
-  @22 = @21;
-  @21 = (recurse on @20
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 6
-  @19)
+    )
+  ) @3) @5))
 {
-  @19 = @15;
-  @15 = @14;
-  @14 = (recurse on @23
-      when 0 -> @22
-      when succ e with p -> (1 + p)
-    );
-  @23 = @1;
-  @22 = @21;
-  @21 = (recurse on @20
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
+  @2 = (x =>
       (y =>
         (recurse on y
           when 0 -> x
-          when succ e with p -> (1 + p)
+          when succ y-1 with _ -> (1 + ((@8 x) y-1))
+        )
+      )
+    );
+  @8 = (@7 @7);
+  @7 = @1;
+  @6 = (recurse on @5
+      when 0 -> @3
+      when succ y-1 with _ -> (1 + ((@2 @3) y-1))
+    );
+  @4 = (1 + @5);
+  @5 = 0;
+  @3 = 1;
+  @1 = (x =>
+      (@0 (x x))
+    );
+  @0 = (add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
         )
       )
     );
 }
 
-(force-nat 6
-  @19)
+(force-nat 1
+  ((y =>
+    (recurse on y
+      when 0 -> @9
+      when succ y-1 with _ -> (1 + ((@8 @9) y-1))
+    )
+  ) @5))
 {
-  @19 = @15;
-  @15 = @14;
-  @14 = (recurse on @23
-      when 0 -> @22
-      when succ e with p -> (1 + p)
-    );
-  @23 = (1 + @7);
-  @22 = @21;
-  @21 = (recurse on @20
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
+  @9 = @3;
+  @2 = (x =>
       (y =>
         (recurse on y
           when 0 -> x
-          when succ e with p -> (1 + p)
+          when succ y-1 with _ -> (1 + ((@8 x) y-1))
+        )
+      )
+    );
+  @8 = (@7 @7);
+  @7 = @1;
+  @6 = (recurse on @5
+      when 0 -> @3
+      when succ y-1 with _ -> (1 + ((@2 @3) y-1))
+    );
+  @4 = (1 + @5);
+  @5 = 0;
+  @3 = 1;
+  @1 = (x =>
+      (@0 (x x))
+    );
+  @0 = (add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
         )
       )
     );
 }
 
-(force-nat 6
-  @19)
+(force-nat 1
+  (recurse on @10
+    when 0 -> @9
+    when succ y-1 with _ -> (1 + ((@8 @9) y-1))
+  ))
 {
-  @19 = @15;
-  @15 = @14;
-  @14 = (recurse on (1 + @7)
-      when 0 -> @22
-      when succ e with p -> (1 + p)
-    );
-  @23 = (1 + @7);
-  @22 = @21;
-  @21 = (recurse on @20
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
+  @10 = @5;
+  @9 = @3;
+  @2 = (x =>
       (y =>
         (recurse on y
           when 0 -> x
-          when succ e with p -> (1 + p)
+          when succ y-1 with _ -> (1 + ((@8 x) y-1))
+        )
+      )
+    );
+  @8 = (@7 @7);
+  @7 = @1;
+  @6 = (recurse on @5
+      when 0 -> @3
+      when succ y-1 with _ -> (1 + ((@2 @3) y-1))
+    );
+  @4 = (1 + @5);
+  @5 = 0;
+  @3 = 1;
+  @1 = (x =>
+      (@0 (x x))
+    );
+  @0 = (add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
         )
       )
     );
 }
 
-(force-nat 6
-  @19)
+(force-nat 1
+  (recurse on @10
+    when 0 -> @9
+    when succ y-1 with _ -> (1 + ((@8 @9) y-1))
+  ))
 {
-  @19 = @15;
-  @15 = @14;
-  @14 = (1 + @24);
-  @24 = (recurse on @7
-      when 0 -> @22
-      when succ e with p -> (1 + p)
-    );
-  @23 = (1 + @7);
-  @22 = @21;
-  @21 = (recurse on @20
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
+  @10 = 0;
+  @9 = @3;
+  @2 = (x =>
       (y =>
         (recurse on y
           when 0 -> x
-          when succ e with p -> (1 + p)
+          when succ y-1 with _ -> (1 + ((@8 x) y-1))
+        )
+      )
+    );
+  @8 = (@7 @7);
+  @7 = @1;
+  @6 = (recurse on @5
+      when 0 -> @3
+      when succ y-1 with _ -> (1 + ((@2 @3) y-1))
+    );
+  @4 = (1 + @5);
+  @5 = 0;
+  @3 = 1;
+  @1 = (x =>
+      (@0 (x x))
+    );
+  @0 = (add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
         )
       )
     );
 }
 
-(force-nat 6
-  @19)
+(force-nat 1
+  (recurse on 0
+    when 0 -> @9
+    when succ y-1 with _ -> (1 + ((@8 @9) y-1))
+  ))
 {
-  @19 = @15;
-  @15 = (1 + @24);
-  @14 = (1 + @24);
-  @24 = (recurse on @7
-      when 0 -> @22
-      when succ e with p -> (1 + p)
-    );
-  @23 = (1 + @7);
-  @22 = @21;
-  @21 = (recurse on @20
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
+  @10 = 0;
+  @9 = @3;
+  @2 = (x =>
       (y =>
         (recurse on y
           when 0 -> x
-          when succ e with p -> (1 + p)
+          when succ y-1 with _ -> (1 + ((@8 x) y-1))
+        )
+      )
+    );
+  @8 = (@7 @7);
+  @7 = @1;
+  @6 = (recurse on @5
+      when 0 -> @3
+      when succ y-1 with _ -> (1 + ((@2 @3) y-1))
+    );
+  @4 = (1 + @5);
+  @5 = 0;
+  @3 = 1;
+  @1 = (x =>
+      (@0 (x x))
+    );
+  @0 = (add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
         )
       )
     );
 }
 
-(force-nat 6
-  @19)
+(force-nat 1
+  @9)
 {
-  @19 = (1 + @24);
-  @15 = (1 + @24);
-  @14 = (1 + @24);
-  @24 = (recurse on @7
-      when 0 -> @22
-      when succ e with p -> (1 + p)
-    );
-  @23 = (1 + @7);
-  @22 = @21;
-  @21 = (recurse on @20
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
+  @10 = 0;
+  @9 = @3;
+  @2 = (x =>
       (y =>
         (recurse on y
           when 0 -> x
-          when succ e with p -> (1 + p)
+          when succ y-1 with _ -> (1 + ((@8 x) y-1))
+        )
+      )
+    );
+  @8 = (@7 @7);
+  @7 = @1;
+  @6 = (recurse on @5
+      when 0 -> @3
+      when succ y-1 with _ -> (1 + ((@2 @3) y-1))
+    );
+  @4 = (1 + @5);
+  @5 = 0;
+  @3 = 1;
+  @1 = (x =>
+      (@0 (x x))
+    );
+  @0 = (add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
         )
       )
     );
 }
 
-(force-nat 6
-  (1 + @24))
+(force-nat 1
+  @9)
 {
-  @19 = (1 + @24);
-  @15 = (1 + @24);
-  @14 = (1 + @24);
-  @24 = (recurse on @7
-      when 0 -> @22
-      when succ e with p -> (1 + p)
-    );
-  @23 = (1 + @7);
-  @22 = @21;
-  @21 = (recurse on @20
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
-  @9 = (1 + @11);
+  @9 = @3;
+  @3 = (1 + @11);
   @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
+  @10 = 0;
+  @2 = (x =>
       (y =>
         (recurse on y
           when 0 -> x
-          when succ e with p -> (1 + p)
+          when succ y-1 with _ -> (1 + ((@8 x) y-1))
+        )
+      )
+    );
+  @8 = (@7 @7);
+  @7 = @1;
+  @6 = (recurse on @5
+      when 0 -> @3
+      when succ y-1 with _ -> (1 + ((@2 @3) y-1))
+    );
+  @4 = (1 + @5);
+  @5 = 0;
+  @1 = (x =>
+      (@0 (x x))
+    );
+  @0 = (add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
         )
       )
     );
 }
 
-(force-nat 7
-  @24)
+(force-nat 1
+  @9)
 {
-  @19 = (1 + @24);
-  @15 = (1 + @24);
-  @14 = (1 + @24);
-  @24 = (recurse on @7
-      when 0 -> @22
-      when succ e with p -> (1 + p)
-    );
-  @23 = (1 + @7);
-  @22 = @21;
-  @21 = (recurse on @20
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
   @9 = (1 + @11);
+  @3 = (1 + @11);
   @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
+  @10 = 0;
+  @2 = (x =>
       (y =>
         (recurse on y
           when 0 -> x
-          when succ e with p -> (1 + p)
+          when succ y-1 with _ -> (1 + ((@8 x) y-1))
+        )
+      )
+    );
+  @8 = (@7 @7);
+  @7 = @1;
+  @6 = (recurse on @5
+      when 0 -> @3
+      when succ y-1 with _ -> (1 + ((@2 @3) y-1))
+    );
+  @4 = (1 + @5);
+  @5 = 0;
+  @1 = (x =>
+      (@0 (x x))
+    );
+  @0 = (add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
         )
       )
     );
 }
 
-(force-nat 7
-  @24)
+(force-nat 1
+  (1 + @11))
 {
-  @24 = (recurse on (1 + @9)
-      when 0 -> @22
-      when succ e with p -> (1 + p)
-    );
-  @19 = (1 + @24);
-  @15 = (1 + @24);
-  @14 = (1 + @24);
-  @23 = (1 + @7);
-  @22 = @21;
-  @21 = (recurse on @20
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
   @9 = (1 + @11);
+  @3 = (1 + @11);
   @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
+  @10 = 0;
+  @2 = (x =>
       (y =>
         (recurse on y
           when 0 -> x
-          when succ e with p -> (1 + p)
+          when succ y-1 with _ -> (1 + ((@8 x) y-1))
+        )
+      )
+    );
+  @8 = (@7 @7);
+  @7 = @1;
+  @6 = (recurse on @5
+      when 0 -> @3
+      when succ y-1 with _ -> (1 + ((@2 @3) y-1))
+    );
+  @4 = (1 + @5);
+  @5 = 0;
+  @1 = (x =>
+      (@0 (x x))
+    );
+  @0 = (add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
         )
       )
     );
 }
 
-(force-nat 7
-  @24)
+(force-nat 2
+  @11)
 {
-  @24 = (1 + @25);
-  @25 = (recurse on @9
-      when 0 -> @22
-      when succ e with p -> (1 + p)
-    );
-  @19 = (1 + @24);
-  @15 = (1 + @24);
-  @14 = (1 + @24);
-  @23 = (1 + @7);
-  @22 = @21;
-  @21 = (recurse on @20
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
   @9 = (1 + @11);
+  @3 = (1 + @11);
   @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
+  @10 = 0;
+  @2 = (x =>
       (y =>
         (recurse on y
           when 0 -> x
-          when succ e with p -> (1 + p)
+          when succ y-1 with _ -> (1 + ((@8 x) y-1))
+        )
+      )
+    );
+  @8 = (@7 @7);
+  @7 = @1;
+  @6 = (recurse on @5
+      when 0 -> @3
+      when succ y-1 with _ -> (1 + ((@2 @3) y-1))
+    );
+  @4 = (1 + @5);
+  @5 = 0;
+  @1 = (x =>
+      (@0 (x x))
+    );
+  @0 = (add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
         )
       )
     );
 }
 
-(force-nat 7
-  (1 + @25))
-{
-  @24 = (1 + @25);
-  @25 = (recurse on @9
-      when 0 -> @22
-      when succ e with p -> (1 + p)
-    );
-  @19 = (1 + @24);
-  @15 = (1 + @24);
-  @14 = (1 + @24);
-  @23 = (1 + @7);
-  @22 = @21;
-  @21 = (recurse on @20
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 8
-  @25)
-{
-  @24 = (1 + @25);
-  @25 = (recurse on @9
-      when 0 -> @22
-      when succ e with p -> (1 + p)
-    );
-  @19 = (1 + @24);
-  @15 = (1 + @24);
-  @14 = (1 + @24);
-  @23 = (1 + @7);
-  @22 = @21;
-  @21 = (recurse on @20
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 8
-  @25)
-{
-  @25 = (recurse on (1 + @11)
-      when 0 -> @22
-      when succ e with p -> (1 + p)
-    );
-  @24 = (1 + @25);
-  @19 = (1 + @24);
-  @15 = (1 + @24);
-  @14 = (1 + @24);
-  @23 = (1 + @7);
-  @22 = @21;
-  @21 = (recurse on @20
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 8
-  @25)
-{
-  @25 = (1 + @26);
-  @26 = (recurse on @11
-      when 0 -> @22
-      when succ e with p -> (1 + p)
-    );
-  @24 = (1 + @25);
-  @19 = (1 + @24);
-  @15 = (1 + @24);
-  @14 = (1 + @24);
-  @23 = (1 + @7);
-  @22 = @21;
-  @21 = (recurse on @20
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 8
-  (1 + @26))
-{
-  @25 = (1 + @26);
-  @26 = (recurse on @11
-      when 0 -> @22
-      when succ e with p -> (1 + p)
-    );
-  @24 = (1 + @25);
-  @19 = (1 + @24);
-  @15 = (1 + @24);
-  @14 = (1 + @24);
-  @23 = (1 + @7);
-  @22 = @21;
-  @21 = (recurse on @20
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 9
-  @26)
-{
-  @25 = (1 + @26);
-  @26 = (recurse on @11
-      when 0 -> @22
-      when succ e with p -> (1 + p)
-    );
-  @24 = (1 + @25);
-  @19 = (1 + @24);
-  @15 = (1 + @24);
-  @14 = (1 + @24);
-  @23 = (1 + @7);
-  @22 = @21;
-  @21 = (recurse on @20
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 9
-  @26)
-{
-  @26 = (recurse on 0
-      when 0 -> @22
-      when succ e with p -> (1 + p)
-    );
-  @25 = (1 + @26);
-  @24 = (1 + @25);
-  @19 = (1 + @24);
-  @15 = (1 + @24);
-  @14 = (1 + @24);
-  @23 = (1 + @7);
-  @22 = @21;
-  @21 = (recurse on @20
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 9
-  @26)
-{
-  @26 = @22;
-  @25 = (1 + @26);
-  @24 = (1 + @25);
-  @19 = (1 + @24);
-  @15 = (1 + @24);
-  @14 = (1 + @24);
-  @23 = (1 + @7);
-  @22 = @21;
-  @21 = (recurse on @20
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 9
-  @26)
-{
-  @26 = @22;
-  @22 = @21;
-  @21 = (recurse on 0
-      when 0 -> 0
-      when succ e with p -> ((@0 p) @1)
-    );
-  @25 = (1 + @26);
-  @24 = (1 + @25);
-  @19 = (1 + @24);
-  @15 = (1 + @24);
-  @14 = (1 + @24);
-  @23 = (1 + @7);
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 9
-  @26)
-{
-  @26 = @22;
-  @22 = @21;
-  @21 = 0;
-  @25 = (1 + @26);
-  @24 = (1 + @25);
-  @19 = (1 + @24);
-  @15 = (1 + @24);
-  @14 = (1 + @24);
-  @23 = (1 + @7);
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 9
-  @26)
-{
-  @26 = @22;
-  @22 = 0;
-  @21 = 0;
-  @25 = (1 + @26);
-  @24 = (1 + @25);
-  @19 = (1 + @24);
-  @15 = (1 + @24);
-  @14 = (1 + @24);
-  @23 = (1 + @7);
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 9
-  @26)
-{
-  @26 = 0;
-  @22 = 0;
-  @21 = 0;
-  @25 = (1 + @26);
-  @24 = (1 + @25);
-  @19 = (1 + @24);
-  @15 = (1 + @24);
-  @14 = (1 + @24);
-  @23 = (1 + @7);
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
-  @9 = (1 + @11);
-  @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
-      (y =>
-        (recurse on y
-          when 0 -> x
-          when succ e with p -> (1 + p)
-        )
-      )
-    );
-}
-
-(force-nat 9
+(force-nat 2
   0)
 {
-  @26 = 0;
-  @22 = 0;
-  @21 = 0;
-  @25 = (1 + @26);
-  @24 = (1 + @25);
-  @19 = (1 + @24);
-  @15 = (1 + @24);
-  @14 = (1 + @24);
-  @23 = (1 + @7);
-  @13 = (1 + @20);
-  @20 = 0;
-  @18 = (1 + @19);
-  @17 = (1 + @18);
-  @12 = (1 + @17);
-  @5 = (1 + @17);
-  @4 = (1 + @17);
-  @16 = (1 + @7);
-  @3 = (1 + @13);
-  @10 = (1 + @12);
   @9 = (1 + @11);
+  @3 = (1 + @11);
   @11 = 0;
-  @8 = (1 + @10);
-  @7 = (1 + @9);
-  @6 = (1 + @7);
-  @1 = (1 + @7);
-  @2 = (1 + @3);
-  @0 = (x =>
+  @10 = 0;
+  @2 = (x =>
       (y =>
         (recurse on y
           when 0 -> x
-          when succ e with p -> (1 + p)
+          when succ y-1 with _ -> (1 + ((@8 x) y-1))
         )
       )
     );
-}
-
-(_ =>
-  ((x =>
-    (x x)
-  ) (x =>
-    (x x)
-  ))
-)
-{
+  @8 = (@7 @7);
+  @7 = @1;
+  @6 = (recurse on @5
+      when 0 -> @3
+      when succ y-1 with _ -> (1 + ((@2 @3) y-1))
+    );
+  @4 = (1 + @5);
+  @5 = 0;
+  @1 = (x =>
+      (@0 (x x))
+    );
+  @0 = (add =>
+      (x =>
+        (y =>
+          (recurse on y
+            when 0 -> x
+            when succ y-1 with _ -> (1 + ((add x) y-1))
+          )
+        )
+      )
+    );
 }
 
 -}
