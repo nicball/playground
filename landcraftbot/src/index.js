@@ -47,13 +47,13 @@ async function searchSth(db, key) {
     .results;
 }
 
-async function searchHistory(db, key) {
+async function searchHistory(db, key, gid) {
   let esckey = key.replaceAll('.', '..').replaceAll('%', '.%').replaceAll('_', '._');
   let glob = '%' + esckey + '%';
   return (await db.prepare(`
-      SELECT tg_group.name AS groupName, tg_user.name AS userName, msgtext AS message
+      SELECT tg_group.name AS groupName, tg_user.name AS userName, msgtext AS message, message.gid AS groupId, message.mid AS messageId
       FROM message LEFT JOIN tg_user ON message.uid = tg_user.uid LEFT JOIN tg_group ON message.gid = tg_group.gid
-      WHERE msgtext LIKE ? ESCAPE '.'
+      WHERE msgtext LIKE ? ESCAPE '.' ${gid ? "AND message.gid = " + gid : ""}
       ORDER BY sendat ASC
       LIMIT 100
     `).bind(glob)
@@ -70,8 +70,8 @@ async function logMessage(db, msg) {
   if (msg.chat.type === 'supergroup' || msg.chat.type === 'group') {
     await db.prepare('REPLACE INTO tg_group(gid, name) VALUES(?, ?)').bind(msg.chat.id, msg.chat.title).run();
     if (msg.text) {
-      await db.prepare('REPLACE INTO message(gid, uid, msgtext, sendat) VALUES(?, ?, ?, ?)')
-        .bind(msg.chat.id, msg.from.id, msg.text, msg.date)
+      await db.prepare('REPLACE INTO message(gid, uid, mid, msgtext, sendat) VALUES(?, ?, ?, ?, ?)')
+        .bind(msg.chat.id, msg.from.id, msg.message_id, msg.text, msg.date)
         .run();
     }
   }
@@ -164,12 +164,15 @@ export default {
             reply_to_message_id: msg.message_id
         });
       }
-      else if (cmd.startsWith('/_search') && msg.from.id === 101639916) {
+      else if (cmd.startsWith('/_search')) {
         let key = args;
         let res = '';
+        let escape = (str) => str.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
         try {
-          for (let { groupName, userName, message } of await searchHistory(env.saysth, key)) {
-            res += `{${groupName}} [${userName}] ${message}\n`;
+          for (let { groupName, userName, message, groupId, messageId } of await searchHistory(env.saysth, key, msg.chat.type == "supergroup" ? msg.chat.id : false)) {
+            let line = `<i>${escape(groupName)}</i> <b>${escape(userName)}</b>: ${escape(message)} <a href="https://t.me/c/${-groupId-1000000000000}/${messageId}">⤴</a>\n\n`;
+            if ((res + line).length > 4000) break;
+            res += line;
           }
         }
         catch (e) {
@@ -179,7 +182,8 @@ export default {
             method: 'sendMessage',
             chat_id: msg.chat.id,
             text: res === '' ? '没搜到哦' : res,
-            reply_to_message_id: msg.message_id
+            reply_to_message_id: msg.message_id,
+            parse_mode: "HTML"
         });
       }
 

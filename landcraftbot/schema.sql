@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS tg_user (
 CREATE TABLE IF NOT EXISTS message (
   gid INTEGER REFERENCES tg_group(gid),
   uid INTEGER REFERENCES tg_user(uid),
+  mid INTEGER,
   msgtext TEXT,
   sendat INTEGER,
-  UNIQUE (gid, uid, msgtext, sendat)
+  UNIQUE (gid, uid, mid)
 );

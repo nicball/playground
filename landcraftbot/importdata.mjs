@@ -3,17 +3,17 @@ import { readFileSync, writeFileSync } from 'node:fs';
 let sqls = [];
 let sql = '';
 sql += 'BEGIN TRANSACTION;\n';
-// let count = 0;
+let count = 0;
 
 function emit(stmt) {
   sql += stmt;
-//   count += 1;
-//   if (count >= 9000) {
-//     count = 0;
-//     sql += 'END TRANSACTION;\n';
-//     sqls.push(sql);
-//     sql = 'BEGIN TRANSACTION;\n';
-//   }
+  count += 1;
+  if (count >= 900000) {
+    count = 0;
+    sql += 'END TRANSACTION;\n';
+    sqls.push(sql);
+    sql = 'BEGIN TRANSACTION;\n';
+  }
 }
 
 function escape(s) {
@@ -30,11 +30,11 @@ function getText(text) {
   return r;
 }
 
-for (let fname of ['result.json']) {
+for (let fname of ['./midy.json']) {
   let json = JSON.parse(readFileSync(fname));
   let gid = json.id;
 
-  emit(`REPLACE INTO tg_group(gid, name) VALUES(${gid}, '${escape(json.name)}');\n`);
+  emit(`REPLACE INTO tg_group(gid, name) VALUES(-100${gid}, '${escape(json.name)}');\n`);
 
   for (let msg of json.messages) {
     if (msg.type !== 'message') continue;
@@ -42,10 +42,11 @@ for (let fname of ['result.json']) {
     let uid = msg.from_id.replaceAll(/[^0-9]/g, '');
     let text = escape(getText(msg.text));
     let sendat = msg.date_unixtime;
+    let mid = msg.id;
     if (msg.from === null) msg.from = '';
     let uname = escape(msg.from);
     emit(`REPLACE INTO tg_user(uid, name) VALUES(${uid}, '${uname}');\n`);
-    emit(`REPLACE INTO message(gid, uid, msgtext, sendat) VALUES(${gid}, ${uid}, '${text}', ${sendat});\n`);
+    emit(`REPLACE INTO message(gid, uid, mid, msgtext, sendat) VALUES(-100${gid}, ${uid}, ${mid}, '${text}', ${sendat});\n`);
   }
 }
 
