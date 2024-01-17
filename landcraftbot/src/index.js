@@ -18,6 +18,11 @@ function getChatName(chat) {
   else throw 'bad chat';
 }
 
+function truncateStr(str, len) {
+  if (str.length > len) return str.substring(0, len - 4) + ' ...';
+  else return str;
+}
+
 async function forwardMsg(msg, chatid) {
   return await (await fetch('https://api.telegram.org/bot692538686:AAHpvMdOh1dTdL4NqPEOki8uQJc-zS9PQbs/forwardMessage', {
     method: 'POST',
@@ -185,12 +190,12 @@ export default {
         let key = args;
         let res = '';
         for (let {id, sendername, summary} of await searchSth(env.saysth, key)) {
-          res += `${id} [${sendername}] ${summary}\n`;
+          res += `${id} [${sendername}] ${truncateStr(summary, 50)}\n`;
         }
         return jsonResponse({
             method: 'sendMessage',
             chat_id: msg.chat.id,
-            text: res === '' ? '没搜到哦' : res.substring(0, 4000),
+            text: res === '' ? '没搜到哦' : truncateStr(res, 4096),
             reply_to_message_id: msg.message_id
         });
       }
@@ -208,7 +213,7 @@ export default {
         let escape = (str) => str.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
         try {
           for (let { groupName, userName, message, groupId, messageId } of await searchHistory(env.saysth, key, msg.chat.type == "supergroup" ? msg.chat.id : false)) {
-            let line = `<b>${escape(userName)}</b>: ${escape(message)} <a href="https://t.me/c/${-groupId-1000000000000}/${messageId}">⤴</a>\n\n`;
+            let line = `<b>${escape(userName)}</b>: ${escape(truncateStr(message, 50))} <a href="https://t.me/c/${-groupId-1000000000000}/${messageId}">⤴</a>\n\n`;
             if (msg.chat.type != "supergroup") {
               line = `<i>${escape(groupName)}</i> ` + line;
             }
