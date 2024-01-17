@@ -8,6 +8,28 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
+function getUserName(user) {
+  return user.first_name + (user.last_name ? ' ' + user.last_name : '');
+}
+
+function getChatName(chat) {
+  if (chat.title) return chat.title;
+  else if (chat.first_name) return getUserName(chat);
+  else throw 'bad chat';
+}
+
+async function forwardMsg(msg, chatid) {
+  return await (await fetch('https://api.telegram.org/bot692538686:AAHpvMdOh1dTdL4NqPEOki8uQJc-zS9PQbs/forwardMessage', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: chatid,
+      from_chat_id: msg.chat.id,
+      message_id: msg.message_id
+    })
+  })).json();
+}
+
 function jsonResponse(map) {
   if (map.text) map.text = map.text.substring(0, 4000);
   let res = new Response(JSON.stringify(map), { headers: { 'Content-Type': 'application/json;charset=UTF-8' } });
@@ -26,14 +48,14 @@ function parseCommand(msg) {
   throw 'impossible';
 }
 
-async function addSth(db, userName, message) {
-  return await db.prepare('INSERT INTO saysth (userName, message) VALUES (?, ?) RETURNING id')
-    .bind(userName, message)
+async function addSth(db, fwdchatid, fwdmsgid, sendername, summary) {
+  return await db.prepare('INSERT INTO saysth (fwdchatid, fwdmsgid, sendername, summary) VALUES (?, ?, ?, ?) RETURNING id')
+    .bind(fwdchatid, fwdmsgid, sendername, summary)
     .first('id');
 }
 
 async function saySth(db, ids) {
-  let stmt = db.prepare('SELECT userName, message FROM saysth WHERE id = ?');
+  let stmt = db.prepare('SELECT fwdchatid, fwdmsgid FROM saysth WHERE id = ?');
   let batch = ids.map(id => stmt.bind(id));
   return (await db.batch(batch)).map(row => row.results[0]);
 }
@@ -41,7 +63,7 @@ async function saySth(db, ids) {
 async function searchSth(db, key) {
   let esckey = key.replaceAll('.', '..').replaceAll('%', '.%').replaceAll('_', '._');
   let glob = '%' + esckey + '%';
-  return (await db.prepare(`SELECT * FROM saysth WHERE userName LIKE ?1 ESCAPE '.' OR message LIKE ?1 ESCAPE '.'`)
+  return (await db.prepare(`SELECT * FROM saysth WHERE sendername LIKE ?1 ESCAPE '.' OR summary LIKE ?1 ESCAPE '.'`)
     .bind(glob)
     .all())
     .results;
@@ -98,25 +120,33 @@ export default {
       else if (cmd.startsWith('/rem')) {
         let sth = msg.reply_to_message;
         let res = '';
-        if (!sth) throw true;
-        if (!sth.text) {
-          res = '只能记住文字！';
-        }
+        if (!sth) res = '?';
         else {
+          let summary = sth.text || sth.caption || "[媒体]";
           let name = '';
-          if (sth.forward_sender_name) {
-            name = sth.forward_sender_name;
+          if (sth.forward_origin) {
+            let origin = sth.forward_origin;
+            if (origin.type === 'user') name = getUserName(origin.sender_user);
+            else if (origin.type === 'hidden_user') name = origin.sender_user_name;
+            else if (origin.type === 'chat') name = getChatName(origin.sender_chat);
+            else if (origin.type === 'channel') name = getChatName(origin.chat);
+            else throw 'unknown origin';
+          }
+          else if (sth.from) {
+            name = getUserName(sth.from);
+          }
+          else if (sth.sender_chat) {
+            name = getChatName(sth.sender_chat);
+          }
+          let fwdres = await forwardMsg(sth, 674060548);
+          if (!fwdres.ok) {
+            res = '保存失败';
+            console.log(fwdres);
           }
           else {
-            let from = sth.forward_from || sth.from;
-            name = from.first_name + (from.last_name ? ' ' + from.last_name : '');
+            let id = await addSth(env.saysth, fwdres.result.chat.id, fwdres.result.message_id, name, summary);
+            res = `记住了！id 是 ${id}。`;
           }
-          let id = await addSth(
-            env.saysth,
-            name,
-            sth.text
-          );
-          res = `记住了！id 是 ${id}。`;
         }
         return jsonResponse({
             method: 'sendMessage',
@@ -130,47 +160,58 @@ export default {
         for (let k of args.matchAll(/[0-9]+/g)) {
           keys.push(parseInt(k));
         }
-        let res = '';
-        let error = null;
+        let errs = [];
         try {
-          for (let { userName, message } of await saySth(env.saysth, keys)) {
-            res += `[${userName}] ${message}\n`;
+          for (let { fwdchatid, fwdmsgid } of await saySth(env.saysth, keys)) {
+            let res = await forwardMsg({ chat: { id: fwdchatid }, message_id: fwdmsgid }, msg.chat.id);
+            if (!res.ok) errs.push(res);
           }
+          if (errs.length != 0) throw errs;
         }
         catch (e) {
-          error = e;
           do {
             console.log(e);
-            e = e.cause;
+            e = e.cause || null;
           } while (e);
+          return jsonResponse({
+              method: 'sendMessage',
+              chat_id: msg.chat.id,
+              text: '不存在的',
+              reply_to_message_id: msg.message_id
+          });
         }
-        return jsonResponse({
-            method: 'sendMessage',
-            chat_id: msg.chat.id,
-            text: error !== null || res === '' ? '不存在的' : res,
-            reply_to_message_id: msg.message_id
-        });
       }
       else if (cmd.startsWith('/search')) {
         let key = args;
         let res = '';
-        for (let {id, userName, message } of await searchSth(env.saysth, key)) {
-          res += `${id} [${userName}] ${message}\n`;
+        for (let {id, sendername, summary} of await searchSth(env.saysth, key)) {
+          res += `${id} [${sendername}] ${summary}\n`;
         }
         return jsonResponse({
             method: 'sendMessage',
             chat_id: msg.chat.id,
-            text: res === '' ? '没搜到哦' : res,
+            text: res === '' ? '没搜到哦' : res.substring(0, 4000),
             reply_to_message_id: msg.message_id
         });
       }
       else if (cmd.startsWith('/_search')) {
+        if (msg.chat.id != -1001407473692 && msg.from.id != 101639916) {
+          return jsonResponse({
+            method: 'sendMessage',
+            chat_id: msg.chat.id,
+            text: '不能说哦',
+            reply_to_message_id: msg.message_id,
+          });
+        }
         let key = args;
         let res = '';
         let escape = (str) => str.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
         try {
           for (let { groupName, userName, message, groupId, messageId } of await searchHistory(env.saysth, key, msg.chat.type == "supergroup" ? msg.chat.id : false)) {
-            let line = `<i>${escape(groupName)}</i> <b>${escape(userName)}</b>: ${escape(message)} <a href="https://t.me/c/${-groupId-1000000000000}/${messageId}">⤴</a>\n\n`;
+            let line = `<b>${escape(userName)}</b>: ${escape(message)} <a href="https://t.me/c/${-groupId-1000000000000}/${messageId}">⤴</a>\n\n`;
+            if (msg.chat.type != "supergroup") {
+              line = `<i>${escape(groupName)}</i> ` + line;
+            }
             if ((res + line).length > 4000) break;
             res += line;
           }

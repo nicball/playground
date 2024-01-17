@@ -30,7 +30,7 @@ function getText(text) {
   return r;
 }
 
-for (let fname of ['./midy-latest.json']) {
+for (let fname of ['./history.json']) {
   let json = JSON.parse(readFileSync(fname));
   let gid = json.id;
 

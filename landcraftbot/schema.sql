@@ -1,7 +1,9 @@
 CREATE TABLE IF NOT EXISTS saysth (
   id INTEGER PRIMARY KEY ASC,
-  userName TEXT,
-  message TEXT
+  fwdmsgid INTEGER,
+  fwdchatid INTEGER,
+  sendername TEXT,
+  summary TEXT
 );
 
 CREATE TABLE IF NOT EXISTS tg_group (
