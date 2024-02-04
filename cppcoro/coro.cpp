@@ -171,10 +171,13 @@ public:
     this->work_queue->push(h);
   }
 
-  template <class T>
-  void run(coro<T> c) {
+  template <class T, class S>
+  void wake(coro<T, S> c) {
+    this->wake(c.handle);
+  }
+
+  void run() {
     auto& q = *this->work_queue;
-    q.push(c.handle);
     while (!q.empty()) {
       q.front().resume();
       q.pop();
@@ -193,8 +196,12 @@ coro<int> complete_sync(scheduler s) {
 
 coro<int> f(scheduler s) {
   co_await complete_sync(s);
-  int i = co_await suspend<int>([](promise<int> k) -> void {
-    k.fulfill(5);
+  int i = co_await suspend<int>([s](promise<int> k) mutable -> void {
+    s.wake(([](promise<int> k) -> coro<int> {
+      std::cout << "sending" << std::endl;
+      k.fulfill(5);
+      co_return 0;
+    })(k));
   });
   std::cout << i << std::endl;
   co_return 1;
@@ -202,6 +209,7 @@ coro<int> f(scheduler s) {
 
 int main() {
   scheduler s;
-  s.run(f(s));
+  s.wake(f(s));
+  s.run();
   return 0;
 }
