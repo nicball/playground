@@ -63,12 +63,12 @@ public:
   }
 
   auto operator co_await() {
-    return coro_awaiter { this };
+    return coro_awaiter{this};
   }
 
-private:
+  std::coroutine_handle<> get_handle() { return this->handle; }
 
-  friend class scheduler;
+private:
 
   struct coro_awaiter {
 
@@ -128,8 +128,7 @@ public:
 
 private:
 
-  template <class U>
-  friend class promise;
+  friend class promise<T>;
   std::function<void(promise<T>)> register_promise;
   std::optional<T> result = std::nullopt;
   std::exception_ptr ex = {};
@@ -173,7 +172,7 @@ public:
 
   template <class T, class S>
   void wake(coro<T, S> c) {
-    this->wake(c.handle);
+    this->wake(c.get_handle());
   }
 
   void run() {
@@ -197,11 +196,11 @@ coro<int> complete_sync(scheduler s) {
 coro<int> f(scheduler s) {
   co_await complete_sync(s);
   int i = co_await suspend<int>([s](promise<int> k) mutable -> void {
-    s.wake(([](promise<int> k) -> coro<int> {
+    s.wake(([](scheduler s, promise<int> k) -> coro<int> {
       std::cout << "sending" << std::endl;
       k.fulfill(5);
       co_return 0;
-    })(k));
+    })(s, k));
   });
   std::cout << i << std::endl;
   co_return 1;
