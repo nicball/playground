@@ -12,18 +12,26 @@ class scheduler;
 template <class T, class Scheduler = scheduler>
 class coro {
 
-public:
+private:
 
-  class promise_type {
+  class coro_promise {
+
+  private:
+
+    friend struct coro::coro_awaiter;
+    std::optional<T> result = std::nullopt;
+    std::coroutine_handle<coro_promise> continuation = {};
+    std::exception_ptr ex = {};
+    Scheduler sched = {};
 
   public:
 
     template <class... Args>
-    promise_type(Scheduler s, Args&&...): sched{s} {}
+    coro_promise(Scheduler s, Args&&...): sched{s} {}
 
-    promise_type() = default;
+    coro_promise() = default;
 
-    coro<T, Scheduler> get_return_object() { return { std::coroutine_handle<promise_type>::from_promise(*this) }; }
+    coro<T, Scheduler> get_return_object() { return { std::coroutine_handle<coro_promise>::from_promise(*this) }; }
 
     void return_value(T value) { this->result = std::move(value); }
 
@@ -33,14 +41,14 @@ public:
 
       struct final_awaiter {
         bool await_ready() noexcept { return false; }
-        std::coroutine_handle<> await_suspend(std::coroutine_handle<promise_type> handle) noexcept {
+        std::coroutine_handle<> await_suspend(std::coroutine_handle<coro_promise> handle) noexcept {
           if (this->p->continuation)
             return this->p->continuation;
           else
             return std::noop_coroutine();
         }
         void await_resume() noexcept {}
-        promise_type* p;
+        coro_promise* p;
       };
 
       return final_awaiter { this };
@@ -48,28 +56,11 @@ public:
 
     void unhandled_exception() { this->ex = std::current_exception(); }
 
-  private:
-
-    friend struct coro::coro_awaiter;
-    template <class> friend class suspend;
-    std::optional<T> result = std::nullopt;
-    std::coroutine_handle<promise_type> continuation = {};
-    std::exception_ptr ex = {};
-    Scheduler sched = {};
+    void wake() {
+      this->sched.wake(std::coroutine_handle<coro_promise>::from_promise(*this));
+    }
 
   };
-
-  ~coro() {
-    // TODO: coroutine life cycle
-  }
-
-  auto operator co_await() {
-    return coro_awaiter{this};
-  }
-
-  std::coroutine_handle<> get_handle() { return this->handle; }
-
-private:
 
   struct coro_awaiter {
 
@@ -77,7 +68,7 @@ private:
 
     bool await_ready() { return false; }
 
-    std::coroutine_handle<> await_suspend(std::coroutine_handle<promise_type> k) {
+    std::coroutine_handle<> await_suspend(std::coroutine_handle<coro_promise> k) {
       auto hdl = this->subcoro->handle;
       hdl.promise().continuation = k;
       return hdl;
@@ -92,9 +83,23 @@ private:
 
   };
 
-  coro(std::coroutine_handle<promise_type> h): handle{h} {}
+  coro(std::coroutine_handle<coro_promise> h): handle{h} {}
 
-  std::coroutine_handle<promise_type> handle;
+  std::coroutine_handle<coro_promise> handle;
+
+public:
+
+  using promise_type = coro_promise;
+
+  ~coro() {
+    // TODO: coroutine life cycle
+  }
+
+  coro_awaiter operator co_await() {
+    return {this};
+  }
+
+  std::coroutine_handle<> get_handle() { return this->handle; }
 
 };
 
@@ -102,6 +107,13 @@ template <class> class promise;
 
 template <class T>
 class suspend {
+
+private:
+
+  friend class promise<T>;
+  std::function<void(promise<T>)> register_promise;
+  std::optional<T> result = std::nullopt;
+  std::exception_ptr ex = {};
 
 public:
 
@@ -112,7 +124,7 @@ public:
 
   template <class P>
   void await_suspend(std::coroutine_handle<P> handle) {
-    this->register_promise(promise<T>{this, [handle]() { handle.promise().sched.wake(handle); }});
+    this->register_promise(promise<T>{this, [handle]() { handle.promise().wake(); }});
   }
 
   T await_resume() {
@@ -121,17 +133,15 @@ public:
     return std::move(*this->result);
   }
 
-private:
-
-  friend class promise<T>;
-  std::function<void(promise<T>)> register_promise;
-  std::optional<T> result = std::nullopt;
-  std::exception_ptr ex = {};
-
 };
 
 template <class T>
 class promise {
+
+private:
+
+  suspend<T>* susp;
+  std::function<void()> wake;
 
 public:
 
@@ -150,14 +160,13 @@ public:
     this->wake();
   }
 
-private:
-
-  suspend<T>* susp;
-  std::function<void()> wake;
-
 };
 
 class scheduler {
+
+private:
+
+  std::shared_ptr<std::queue<std::coroutine_handle<>>> work_queue = std::make_shared<std::queue<std::coroutine_handle<>>>();
 
 public:
 
@@ -177,10 +186,6 @@ public:
       q.pop();
     }
   }
-
-private:
-
-  std::shared_ptr<std::queue<std::coroutine_handle<>>> work_queue = std::make_shared<std::queue<std::coroutine_handle<>>>();
 
 };
 
