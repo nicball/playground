@@ -9,7 +9,7 @@
 
 class scheduler;
 
-template <class T, class Scheduler = scheduler>
+template <class T>
 class coro {
 
 private:
@@ -22,16 +22,12 @@ private:
     std::optional<T> result = std::nullopt;
     std::coroutine_handle<coro_promise> continuation = {};
     std::exception_ptr ex = {};
-    Scheduler sched = {};
 
   public:
 
-    template <class... Args>
-    coro_promise(Scheduler s, Args&&...): sched{s} {}
-
     coro_promise() = default;
 
-    coro<T, Scheduler> get_return_object() { return { std::coroutine_handle<coro_promise>::from_promise(*this) }; }
+    coro get_return_object() { return { std::coroutine_handle<coro_promise>::from_promise(*this) }; }
 
     void return_value(T value) { this->result = std::move(value); }
 
@@ -56,15 +52,17 @@ private:
 
     void unhandled_exception() { this->ex = std::current_exception(); }
 
-    void wake() {
-      this->sched.wake(std::coroutine_handle<coro_promise>::from_promise(*this));
-    }
-
   };
 
-  struct coro_awaiter {
+  class coro_awaiter {
+
+  private:
 
     coro* subcoro;
+
+  public:
+
+    coro_awaiter(coro* s): subcoro{s} {}
 
     bool await_ready() { return false; }
 
@@ -114,17 +112,17 @@ private:
   std::function<void(promise<T>)> register_promise;
   std::optional<T> result = std::nullopt;
   std::exception_ptr ex = {};
+  std::function<void(std::coroutine_handle<>)> wake;
 
 public:
 
-  template <class F>
-  suspend(F&& f): register_promise{std::forward<F>(f)} {}
+  template <class Scheduler, class F>
+  suspend(Scheduler s, F&& f): wake{[s](std::coroutine_handle<> h) { s.wake(h); }}, register_promise{std::forward<F>(f)} {}
 
   bool await_ready() { return false; }
 
-  template <class P>
-  void await_suspend(std::coroutine_handle<P> handle) {
-    this->register_promise(promise<T>{this, [handle]() { handle.promise().wake(); }});
+  void await_suspend(std::coroutine_handle<> handle) {
+    this->register_promise(promise<T>{this, handle});
   }
 
   T await_resume() {
@@ -141,23 +139,22 @@ class promise {
 private:
 
   suspend<T>* susp;
-  std::function<void()> wake;
+  std::coroutine_handle<> handle;
 
 public:
 
-  template <class F>
-  promise(suspend<T>* s, F&& f): susp{s}, wake{std::forward<F>(f)} {}
+  promise(suspend<T>* s, std::coroutine_handle<> h): susp{s}, handle{h} {}
 
   void fulfill(T value) { 
     this->susp->result = value;
-    this->wake();
+    this->susp->wake(this->handle);
   }
 
   template <class U>
   void reject(U error) {
     try { throw error; }
     catch (...) { this->susp->ex = std::current_exception(); }
-    this->wake();
+    this->susp->wake(this->handle);
   }
 
 };
@@ -170,16 +167,16 @@ private:
 
 public:
 
-  void wake(std::coroutine_handle<> h) {
+  void wake(std::coroutine_handle<> h) const {
     this->work_queue->push(h);
   }
 
-  template <class T, class S>
-  void wake(coro<T, S> c) {
+  template <class T>
+  void wake(coro<T> c) const {
     this->wake(c.get_handle());
   }
 
-  void run() {
+  void run() const {
     auto& q = *this->work_queue;
     while (!q.empty()) {
       q.front().resume();
@@ -189,18 +186,18 @@ public:
 
 };
 
-coro<int> complete_sync(scheduler s) {
+coro<int> complete_sync() {
   co_return 1;
 }
 
 coro<int> f(scheduler s) {
-  co_await complete_sync(s);
-  int i = co_await suspend<int>([s](promise<int> k) mutable -> void {
-    s.wake(([](scheduler s, promise<int> k) -> coro<int> {
+  co_await complete_sync();
+  int i = co_await suspend<int>(s, [s](promise<int> k) -> void {
+    s.wake(([](promise<int> k) -> coro<int> {
       std::cout << "sending" << std::endl;
       k.fulfill(5);
       co_return 0;
-    })(s, k));
+    })(k));
   });
   std::cout << i << std::endl;
   co_return 1;
