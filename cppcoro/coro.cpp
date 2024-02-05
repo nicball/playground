@@ -33,10 +33,11 @@ public:
 
       struct final_awaiter {
         bool await_ready() noexcept { return false; }
-        void await_suspend(std::coroutine_handle<promise_type> handle) noexcept {
-          if (this->p->continuation) {
-            this->p->sched.wake(this->p->continuation);
-          }
+        std::coroutine_handle<> await_suspend(std::coroutine_handle<promise_type> handle) noexcept {
+          if (this->p->continuation)
+            return this->p->continuation;
+          else
+            return std::noop_coroutine();
         }
         void await_resume() noexcept {}
         promise_type* p;
@@ -76,16 +77,10 @@ private:
 
     bool await_ready() { return false; }
 
-    bool await_suspend(std::coroutine_handle<promise_type> k) {
+    std::coroutine_handle<> await_suspend(std::coroutine_handle<promise_type> k) {
       auto hdl = this->subcoro->handle;
-      hdl.resume();
-      if (hdl.done()) {
-        return false;
-      }
-      else {
-        hdl.promise().continuation = k;
-        return true;
-      }
+      hdl.promise().continuation = k;
+      return hdl;
     }
 
     T await_resume() {
