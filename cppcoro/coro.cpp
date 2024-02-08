@@ -62,7 +62,14 @@ private:
       return final_awaiter { this };
     }
 
-    void unhandled_exception() { this->ex = std::current_exception(); }
+    void unhandled_exception() {
+      this->ex = std::current_exception();
+      std::cerr << "caught unhandled exception";
+      try { std::rethrow_exception(this->ex); }
+      catch (std::exception& e) { std::cerr << " " << e.what(); }
+      catch (...) {}
+      std::cerr << std::endl;
+    }
 
     scheduler* get_scheduler() const { assert(this->sched); return this->sched; }
 
@@ -243,7 +250,9 @@ private:
   public:
     write_awaiter(channel* c, T v): chan{c}, value{std::move(v)} {}
     bool await_ready() {
-      return this->chan->write_end - this->chan->read_end < this->chan->size;
+      std::size_t count = this->chan->write_end - this->chan->read_end;
+      if (this->chan->reader_count == 0) throw channel_half_closed_exception{};
+      return count < this->chan->size;
     }
     template <class P>
     void await_suspend(std::coroutine_handle<P> handle) {
@@ -252,7 +261,6 @@ private:
     }
     void await_resume() {
       std::cerr << "resumed from writing " << this->chan << std::endl;
-      if (this->chan->reader_count == 0) throw channel_half_closed_exception{};
       std::size_t index = this->chan->write_end % this->chan->size;
       assert(index <= this->chan->buffer.size());
       if (index == this->chan->buffer.size())
@@ -273,7 +281,9 @@ private:
   public:
     read_awaiter(channel* c): chan{c} {}
     bool await_ready() {
-      return this->chan->write_end - this->chan->read_end > 0;
+      std::size_t count = this->chan->write_end - this->chan->read_end;
+      if (count == 0 && this->chan->writer_count == 0) throw channel_half_closed_exception{};
+      return count > 0;
     }
     template <class P>
     void await_suspend(std::coroutine_handle<P> handle) {
@@ -281,7 +291,6 @@ private:
     }
     T await_resume() {
       std::cerr << "resumed from reading " << this->chan << std::endl;
-      if (this->chan->writer_count == 0) throw channel_half_closed_exception{};
       T res = std::move(this->chan->buffer[this->chan->read_end % this->chan->size]);
       if (!this->chan->writers.empty()) {
         this->chan->writers.front().coro.wake();
@@ -365,21 +374,24 @@ public:
   broadcast(typename channel<T>::reader i): input{i} {}
 
   coro<unit> run() {
-    for (;;) {
-      T v = co_await this->input.read();
-      for (auto i = this->receivers.begin(); i != this->receivers.end(); ) {
-        auto& r = *i;
-        auto curr = i++;
-        try {
-          std::cerr << "broadcasting " << v << " to " << r.get_channel() << std::endl;
-          co_await r.write(v);
-        }
-        catch (channel_half_closed_exception) {
-          std::cerr << "broadcast: forgetting " << r.get_channel() << std::endl;
-          this->receivers.erase(curr);
+    try {
+      for (;;) {
+        T v = co_await this->input.read();
+        for (auto i = this->receivers.begin(); i != this->receivers.end(); ) {
+          auto& r = *i;
+          auto curr = i++;
+          try {
+            std::cerr << "broadcasting " << v << " to " << r.get_channel() << std::endl;
+            co_await r.write(v);
+          }
+          catch (channel_half_closed_exception) {
+            std::cerr << "broadcast: forgetting " << r.get_channel() << std::endl;
+            this->receivers.erase(curr);
+          }
         }
       }
     }
+    catch (channel_half_closed_exception) {}
   }
 
   void subscribe(channel<T>::writer w) {
