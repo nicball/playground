@@ -8,6 +8,9 @@
 #include <queue>
 #include <vector>
 #include <deque>
+#include <set>
+
+struct unit {};
 
 class scheduler;
 
@@ -82,7 +85,7 @@ private:
       auto& p = this->subcoro->handle.promise();
       if (p.ex) std::rethrow_exception(p.ex);
       assert(p.result.has_value());
-      return std::move(*p.result);
+      return *p.result;
     }
 
   };
@@ -137,6 +140,13 @@ public:
 
 };
 
+struct wakable {
+  std::coroutine_handle<> handle;
+  scheduler* sched;
+  wakable(std::coroutine_handle<> h, scheduler* s): handle{h}, sched{s} {}
+  void wake() { this->sched->wake(this->handle); }
+};
+
 template <class> class promise;
 
 template <class T>
@@ -159,13 +169,13 @@ public:
   template <class P>
   void await_suspend(std::coroutine_handle<P> handle) {
     scheduler* s = handle.promise().get_scheduler();
-    this->register_promise(s, promise<T>{this, handle, s});
+    this->register_promise(s, promise<T>{this, {handle, s}});
   }
 
   T await_resume() {
     if (this->ex) std::rethrow_exception(this->ex);
     assert(this->result);
-    return std::move(*this->result);
+    return *this->result;
   }
 
 };
@@ -176,23 +186,138 @@ class promise {
 private:
 
   suspend<T>* susp;
-  std::coroutine_handle<> handle;
-  scheduler* sched;
+  wakable handle;
 
 public:
 
-  promise(suspend<T>* s, std::coroutine_handle<> h, scheduler* sc): susp{s}, handle{h}, sched{sc} {}
+  promise(suspend<T>* s, wakable w): susp{s}, handle{w} {}
 
   void fulfill(T value) { 
     this->susp->result = value;
-    this->sched->wake(this->handle);
+    this->handle.wake();
   }
 
   template <class U>
   void reject(U error) {
     try { throw error; }
     catch (...) { this->susp->ex = std::current_exception(); }
-    this->sched->wake(this->handle);
+    this->handle.wake();
+  }
+
+};
+
+template <class T>
+class channel {
+
+private:
+  std::vector<T> buffer = {};
+  std::size_t size;
+  std::size_t read_end = 0;
+  std::size_t write_end = 0;
+  std::deque<wakable> writers = {};
+  std::deque<wakable> readers = {};
+
+  class write_awaiter {
+  private:
+    channel* chan;
+    T value;
+  public:
+    write_awaiter(channel* c, T v): chan{c}, value{std::move(v)} {}
+    bool await_ready() {
+      return this->chan->write_end - this->chan->read_end < this->chan->size;
+    }
+    template <class P>
+    void await_suspend(std::coroutine_handle<P> handle) {
+      this->chan->writers.push_back({handle, handle.promise().get_scheduler()});
+    }
+    void await_resume() {
+      std::size_t index = this->chan->write_end % this->chan->size;
+      assert(index <= this->chan->buffer.size());
+      if (index == this->chan->buffer.size())
+        this->chan->buffer.push_back(std::move(this->value));
+      else
+        this->chan->buffer[index] = std::move(this->value);
+      if (this->chan->write_end == this->chan->read_end && !this->chan->readers.empty()) {
+        this->chan->readers.front().wake();
+        this->chan->readers.pop_front();
+      }
+      ++this->chan->write_end;
+    }
+  };
+
+  class read_awaiter {
+  private:
+    channel* chan;
+  public:
+    read_awaiter(channel* c): chan{c} {}
+    bool await_ready() {
+      return this->chan->write_end - this->chan->read_end > 0;
+    }
+    template <class P>
+    void await_suspend(std::coroutine_handle<P> handle) {
+      this->chan->readers.push_back({handle, handle.promise().get_scheduler()});
+    }
+    T await_resume() {
+      T res = std::move(this->chan->buffer[this->chan->read_end % this->chan->size]);
+      if (this->chan->write_end - this->chan->read_end == this->chan->size && !this->chan->writers.empty()) {
+        this->chan->writers.front().wake();
+        this->chan->writers.pop_front();
+      }
+      ++this->chan->read_end;
+      return res;
+    }
+  };
+
+public:
+
+  channel(std::size_t s): size{s} {
+    this->buffer.reserve(size);
+  }
+
+  write_awaiter write(T value) {
+    return {this, std::move(value)};
+  }
+
+  read_awaiter read() {
+    return {this};
+  }
+
+};
+
+template <class T>
+class broadcast {
+
+private:
+
+  channel<T>* input;
+  std::set<channel<T>*> receivers;
+
+public:
+
+  class receiver {
+  private:
+    std::shared_ptr<channel<T>> chan;
+  public:
+    receiver(std::shared_ptr<channel<T>> c): chan{std::move(c)} {}
+    auto read() { return this->chan->read(); }
+  };
+
+  broadcast(channel<T>* i): input{i} {}
+
+  coro<unit> run() {
+    for (;;) {
+      T v = co_await this->input->read();
+      for (auto r : this->receivers) co_await r->write(v);
+    }
+  }
+
+  receiver get_receiver(std::size_t size) {
+    std::shared_ptr<channel<T>> c{new channel<T>(size), [this](auto p) {
+      this->receivers.erase(p);
+      delete p;
+    }};
+    this->receivers.insert(c.get());
+    return {c};
   }
 
 };
@@ -214,109 +339,29 @@ coro<int> f() {
   co_return 1;
 }
 
-template <class T>
-class broadcast_state {
-
-private:
-
-  std::vector<T> buffer;
-  int write_end = 0;
-  std::deque<std::coroutine_handle<>> wait_list = {};
-  scheduler* sched;
-
-public:
-
-  broadcast_state(scheduler* s, int size): sched{s}, buffer(size) {}
-
-  int append(T value) {
-    int index = this->write_end++;
-    this->buffer[index % (int)this->buffer.size()] = std::move(value);
-    std::deque<std::coroutine_handle<>> wl = {};
-    std::swap(wl, this->wait_list);
-    for (auto h : wl) this->sched->wake(h);
-    return index;
-  }
-
-  T read(int index) {
-    return this->buffer[index % (int)this->buffer.size()];
-  }
-
-  std::optional<int> next_available(int index) {
-    if (this->write_end == 0 || this->write_end == index) return std::nullopt;
-    assert(0 <= index && index < this->write_end);
-    int oldest = std::max(0, this->write_end - (int)this->buffer.size() + 1);
-    return std::max(oldest, index);
-  }
-
-  void wait(std::coroutine_handle<> handle) {
-    this->wait_list.push_back(handle);
-  }
-};
-
-template <class T>
-class broadcast {
-
-private:
-
-  struct broadcast_awaiter {
-
-    broadcast* b;
-
-    bool await_ready() {
-      return static_cast<bool>(this->b->state->next_available(this->b->read_end));
-    }
-
-    void await_suspend(std::coroutine_handle<> handle) {
-      this->b->state->wait(handle);
-    }
-
-    T await_resume() {
-      this->b->read_end = *this->b->state->next_available(this->b->read_end);
-      return this->b->state->read(this->b->read_end++);
-    }
-
-  };
-
-  std::shared_ptr<broadcast_state<T>> state;
-  int read_end = 0;
-
-public:
-
-  broadcast(scheduler* s, int size): state{std::make_shared<broadcast_state<T>>(s, size)} {}
-
-  broadcast_awaiter recv() {
-    return {this};
-  }
-
-  void send(T value) {
-    this->state->append(std::move(value));
-  }
-
-};
-
-struct unit {};
-
-coro<unit> broadcaster(broadcast<int> b) {
+coro<unit> broadcaster(channel<int>* p) {
   for (int i = 0; i < 10; ++i) {
-    b.send(i);
+    co_await p->write(i);
     std::cout << "sent " << i << std::endl;
   }
   co_return {};
 };
 
-coro<unit> audience(broadcast<int> b) {
+coro<unit> audience(int id, broadcast<int>::receiver s) {
   std::cout << "started receiving" << std::endl;
-  for (;;) std::cout << "got " << co_await b.recv() << std::endl;
+  for (;;) std::cout << id  << " got " << co_await s.read() << std::endl;
   co_return {};
 }
 
 int main() {
   scheduler s;
-  s.wake(f());
-  broadcast<int> b{&s, 5};
-  s.wake(broadcaster(b));
-  s.wake(audience(b));
-  s.wake(audience(b));
+  // s.wake(f());
+  channel<int> c{5};
+  broadcast<int> b{&c};
+  s.wake(b.run());
+  s.wake(broadcaster(&c));
+  s.wake(audience(1, b.get_receiver(2)));
+  s.wake(audience(2, b.get_receiver(2)));
   s.run();
   return 0;
 }
