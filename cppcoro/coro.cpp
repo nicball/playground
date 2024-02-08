@@ -19,12 +19,14 @@ class coro {
 
 private:
 
+  class coro_awaiter;
+
   class coro_promise {
 
   private:
 
     friend class coro;
-    friend struct coro::coro_awaiter;
+    friend class coro::coro_awaiter;
     std::optional<T> result = std::nullopt;
     std::coroutine_handle<coro_promise> continuation = {};
     std::exception_ptr ex = {};
@@ -209,10 +211,10 @@ public:
 
 };
 
-class channel_destroyed_exception : public std::exception {
+class channel_half_closed_exception : public std::exception {
 public:
   const char* what() const noexcept override {
-    return "co_awaiting a channel that's been destroyed";
+    return "co_awaiting a channel that's half closed";
   }
 };
 
@@ -236,10 +238,8 @@ private:
 
   class write_awaiter {
   private:
-    friend class channel;
     channel* chan;
     T value;
-    bool channel_gone = false;
   public:
     write_awaiter(channel* c, T v): chan{c}, value{std::move(v)} {}
     bool await_ready() {
@@ -247,10 +247,12 @@ private:
     }
     template <class P>
     void await_suspend(std::coroutine_handle<P> handle) {
+      std::cerr << "suspended while writing " << this->chan << std::endl;
       this->chan->writers.push_back({{handle, handle.promise().get_scheduler()}, this});
     }
     void await_resume() {
-      if (this->channel_gone) throw channel_destroyed_exception{};
+      std::cerr << "resumed from writing " << this->chan << std::endl;
+      if (this->chan->reader_count == 0) throw channel_half_closed_exception{};
       std::size_t index = this->chan->write_end % this->chan->size;
       assert(index <= this->chan->buffer.size());
       if (index == this->chan->buffer.size())
@@ -267,9 +269,7 @@ private:
 
   class read_awaiter {
   private:
-    friend class channel;
     channel* chan;
-    bool channel_gone = false;
   public:
     read_awaiter(channel* c): chan{c} {}
     bool await_ready() {
@@ -280,7 +280,8 @@ private:
       this->chan->readers.push_back({{handle, handle.promise().get_scheduler()}, this});
     }
     T await_resume() {
-      if (this->channel_gone) throw channel_destroyed_exception{};
+      std::cerr << "resumed from reading " << this->chan << std::endl;
+      if (this->chan->writer_count == 0) throw channel_half_closed_exception{};
       T res = std::move(this->chan->buffer[this->chan->read_end % this->chan->size]);
       if (!this->chan->writers.empty()) {
         this->chan->writers.front().coro.wake();
@@ -297,31 +298,57 @@ private:
   std::size_t write_end = 0;
   std::deque<write_awaiter_handle> writers = {};
   std::deque<read_awaiter_handle> readers = {};
+  std::size_t reader_count = 0;
+  std::size_t writer_count = 0;
 
 public:
 
+  class reader {
+  private:
+    channel* chan;
+  public:
+    reader(channel* c): chan{c} {
+      ++this->chan->reader_count;
+    }
+    ~reader() {
+      --this->chan->reader_count;
+    }
+    reader(const reader& other): reader{other.chan} {}
+    reader& operator=(const reader& other) = delete;
+    read_awaiter read() const { return {this->chan}; }
+    bool operator<(const reader& o) const { return this->chan < o.chan; }
+    channel* get_channel() const { return this->chan; }
+  };
+
+  class writer {
+  private:
+    channel* chan;
+  public:
+    writer(channel* c): chan{c} {
+      ++this->chan->writer_count;
+    }
+    ~writer() {
+      --this->chan->writer_count;
+    }
+    writer(const writer& other): writer{other.chan} {}
+    writer& operator=(const writer& other) = delete;
+    write_awaiter write(T value) const { return {this->chan, std::move(value)}; }
+    bool operator<(const writer& o) const { return this->chan < o.chan; }
+    channel* get_channel() const { return this->chan; }
+  };
+
   channel(std::size_t s): size{s} {
-    this->buffer.reserve(size);
+    this->buffer.reserve(this->size);
   }
 
-  ~channel() {
-    for (auto& c : this->writers) {
-      c.awaiter->channel_gone = true;
-      c.coro.wake();
-    }
-    for (auto& c : this->readers) {
-      c.awaiter->channel_gone = true;
-      c.coro.wake();
-    }
-  }
+  // ~channel() {
+  //   assert(this->readers.size() == 0);
+  //   assert(this->writers.size() == 0);
+  // }
 
-  write_awaiter write(T value) {
-    return {this, std::move(value)};
-  }
+  reader get_reader() { return {this}; }
 
-  read_awaiter read() {
-    return {this};
-  }
+  writer get_writer() { return {this}; }
 
 };
 
@@ -330,40 +357,35 @@ class broadcast {
 
 private:
 
-  channel<T>* input;
-  std::set<channel<T>*> receivers;
+  channel<T>::reader input;
+  std::set<typename channel<T>::writer> receivers;
 
 public:
 
-  class receiver {
-  private:
-    std::shared_ptr<channel<T>> chan;
-  public:
-    receiver(std::shared_ptr<channel<T>> c): chan{std::move(c)} {}
-    auto read() { return this->chan->read(); }
-  };
-
-  broadcast(channel<T>* i): input{i} {}
+  broadcast(typename channel<T>::reader i): input{i} {}
 
   coro<unit> run() {
     for (;;) {
-      T v = co_await this->input->read();
-      for (auto r : this->receivers) try {
-        co_await r->write(v);
+      T v = co_await this->input.read();
+      for (auto i = this->receivers.begin(); i != this->receivers.end(); ) {
+        auto& r = *i;
+        auto curr = i++;
+        try {
+          std::cerr << "broadcasting " << v << " to " << r.get_channel() << std::endl;
+          co_await r.write(v);
+        }
+        catch (channel_half_closed_exception) {
+          std::cerr << "broadcast: forgetting " << r.get_channel() << std::endl;
+          this->receivers.erase(curr);
+        }
       }
-      catch (channel_destroyed_exception) {}
     }
   }
 
-  receiver get_receiver(std::size_t size) {
-    std::shared_ptr<channel<T>> c{new channel<T>(size), [this](auto p) {
-      std::cout << "unregistering receiver" << std::endl;
-      this->receivers.erase(p);
-      delete p;
-    }};
-    this->receivers.insert(c.get());
-    return {c};
+  void subscribe(channel<T>::writer w) {
+    receivers.insert(w);
   }
+
 
 };
 
@@ -384,15 +406,15 @@ coro<int> f() {
   co_return 1;
 }
 
-coro<unit> broadcaster(channel<int>* p) {
+coro<unit> broadcaster(typename channel<int>::writer p) {
   for (int i = 0; i < 10; ++i) {
-    co_await p->write(i);
+    co_await p.write(i);
     std::cout << "sent " << i << std::endl;
   }
   co_return {};
 };
 
-coro<unit> audience(int id, broadcast<int>::receiver s, int len) {
+coro<unit> audience(int id, typename channel<int>::reader s, int len) {
   std::cout << "started receiving" << std::endl;
   for (int i = 0; i < len; ++i)
     std::cout << id  << " got " << co_await s.read() << std::endl;
@@ -403,11 +425,14 @@ int main() {
   scheduler s;
   // s.wake(f());
   channel<int> c{5};
-  broadcast<int> b{&c};
+  broadcast<int> b{c.get_reader()};
+  channel<int> a1{2}, a2{2};
+  b.subscribe(a1.get_writer());
+  b.subscribe(a2.get_writer());
   s.wake(b.run());
-  s.wake(broadcaster(&c));
-  s.wake(audience(1, b.get_receiver(2), 3));
-  s.wake(audience(2, b.get_receiver(2), 9));
+  s.wake(broadcaster(c.get_writer()));
+  s.wake(audience(1, a1.get_reader(), 3));
+  s.wake(audience(2, a2.get_reader(), 9));
   s.run();
   return 0;
 }
