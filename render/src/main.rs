@@ -127,35 +127,65 @@ fn project(point: Vec3, camera: Camera) -> Vec2 {
   Vec2::new2(p * x, p * y)
 }
 
-type Color = bool;
+type Color = Vec3;
 
-const BLACK: bool = true;
-const WHITE: bool = false;
-
-fn distance(point: Vec3, line: Line) -> f32 {
+fn distance(point: Vec3, line: Line) -> Vec3 {
   let slope = point - line.point;
   let bot_len = slope * line.direction.normalize();
-  (slope * slope - bot_len * bot_len).sqrt()
+  let foot = line.point + line.direction.normalize() * bot_len;
+  foot - point
 }
 
-fn sample(point: Vec2, segments: &Vec<Vec2>, epsilon: f32) -> Color {
-  let mut hit = false;
+#[derive(Copy, Clone, Debug)]
+struct Vertex {
+  position: Vec3,
+  color: Color,
+}
+
+fn sample_segments(point: Vec2, segments: &Vec<Vertex>, epsilon: f32) -> Color {
   for i in 0..segments.len() - 1 {
-    let a = segments[i];
-    let b = segments[i + 1];
+    let a = segments[i].position;
+    let b = segments[i + 1].position;
     if (point - a) * (b - a) < 0. || (point - b) * (a - b) < 0. { continue; }
-    if distance(point, Line { point: a, direction: b - a }) < epsilon {
-      hit = true;
-      break;
+    let dist = distance(point, Line { point: a, direction: b - a });
+    if dist.length() < epsilon {
+      let foot = point + dist;
+      let da = (foot - a).length();
+      let db = (foot - b).length();
+      return segments[i].color * (db / (da + db)) + segments[i + 1].color * (da / (da + db));
     }
   }
-  if hit { BLACK } else { WHITE }
+  Vec3::new3(0.0, 0.0, 0.0)
 }
 
-fn rasterize(camera: Camera, segments: &Vec<Vec2>, resolution_x: i32, resolution_y: i32) -> Vec<Color> {
-  let mut projected_segments = Vec::new();
-  for v in segments {
-    projected_segments.push(project(*v, camera));
+fn sample_triangles(point: Vec2, triangles: &Vec<Vertex>) -> Color {
+  for i in 0..triangles.len() - 2 {
+    let a = triangles[i].position;
+    let b = triangles[i + 1].position;
+    let c = triangles[i + 2].position;
+    let va = cross_product(b - a, point - a);
+    let vb = cross_product(c - b, point - b);
+    let vc = cross_product(a - c, point - c);
+    if va * vb > 0.0 && vb * vc > 0.0 {
+      let da = point - a;
+      let db = point - b;
+      let dc = point - c;
+      let pa = cross_product(db, dc).length();
+      let pb = cross_product(dc, da).length();
+      let pc = cross_product(da, db).length();
+      let denom = pa + pb + pc;
+      return triangles[i].color * (pa / denom)
+        + triangles[i + 1].color * (pb / denom)
+        + triangles[i + 2].color * (pc / denom);
+    }
+  }
+  Vec3::new3(0.0, 0.0, 0.0)
+}
+
+fn rasterize(camera: Camera, vertices: &Vec<Vertex>, resolution_x: i32, resolution_y: i32) -> Vec<Color> {
+  let mut projected_vertices = Vec::new();
+  for v in vertices {
+    projected_vertices.push(Vertex { position: project(v.position, camera), color: v.color });
   }
   let canvas_width = (camera.horizontal_fov / 2.).sin() * camera.near_cap * 2.;
   let canvas_height = (camera.vertical_fov / 2.).sin() * camera.near_cap * 2.;
@@ -167,29 +197,32 @@ fn rasterize(camera: Camera, segments: &Vec<Vec2>, resolution_x: i32, resolution
   for j in (0..resolution_y).rev() {
     for i in 0..resolution_x {
       let p = bottom_left + Vec2::new2(i as f32 * dx, j as f32 * dy);
-      ret.push(sample(p, &projected_segments, epsilon));
+      ret.push(sample_triangles(p, &projected_vertices));
     }
   }
   ret
 }
 
 fn main() {
-  let tlf = Vec3::new3(-0.5, -0.5, 0.5);
-  let tlb = Vec3::new3(-0.5, 0.5, 0.5);
-  let trf = Vec3::new3(0.5, -0.5, 0.5);
-  let trb = Vec3::new3(0.5, 0.5, 0.5);
-  let blf = Vec3::new3(-0.5, -0.5, -0.5);
-  let blb = Vec3::new3(-0.5, 0.5, -0.5);
-  let brf = Vec3::new3(0.5, -0.5, -0.5);
-  let brb = Vec3::new3(0.5, 0.5, -0.5);
-  let cube = vec![
+  let tlf = Vertex { position: Vec3::new3(-0.5, -0.5, 0.5), color: Vec3::new3(0.0, 0.0, 0.0) };
+  let tlb = Vertex { position: Vec3::new3(-0.5, 0.5, 0.5), color: Vec3::new3(0.0, 0.0, 1.0) };
+  let trf = Vertex { position: Vec3::new3(0.5, -0.5, 0.5), color: Vec3::new3(0.0, 1.0, 0.0) };
+  let trb = Vertex { position: Vec3::new3(0.5, 0.5, 0.5), color: Vec3::new3(1.0, 0.0, 0.0) };
+  let blf = Vertex { position: Vec3::new3(-0.5, -0.5, -0.5), color: Vec3::new3(1.0, 1.0, 0.0) };
+  let blb = Vertex { position: Vec3::new3(-0.5, 0.5, -0.5), color: Vec3::new3(1.0, 1.0, 1.0) };
+  let brf = Vertex { position: Vec3::new3(0.5, -0.5, -0.5), color: Vec3::new3(0.0, 1.0, 1.0) };
+  let brb = Vertex { position: Vec3::new3(0.5, 0.5, -0.5), color: Vec3::new3(1.0, 0.0, 1.0) };
+  let cube_segments = vec![
     tlf, trf, brf, blf, tlf,
     tlb, trb, brb, blb, tlb,
     blb, blf,
     brf, brb, trb, trf
   ];
+  let cube_triangles = vec![
+    tlf, blf, trf, brf, brb, blf, blb, tlf, tlb, trf, trb, brb, tlb, blb
+  ];
   let camera = Camera {
-    position: Vec3::new3(3.0, -6.0, 3.0),
+    position: Vec3::new3(1.5, -3.0, 1.5),
     direction: Vec3::new3(-1.5, 3.0, -1.5),
     up: Vec3::new3(-1.0 / 3.0, 1.0 / 3.0, 1.0),
     // position: Vec3::new3(0., -3., 0.),
@@ -197,13 +230,12 @@ fn main() {
     // up: Vec3::new3(0., 0., 1.),
     near_cap: 0.25,
     far_cap: 1000.,
-    horizontal_fov: 3.14 / 6.,
-    vertical_fov: 3.14 / 6. / 16. * 9.,
+    horizontal_fov: 3.14,
+    vertical_fov: 3.14 / 16.0 * 9.0,
   };
-  let pic = rasterize(camera, &cube, 1920, 1080);
-  println!("P3 1920 1080 1\n");
+  let pic = rasterize(camera, &cube_triangles, 1920, 1080);
+  println!("P3 1920 1080 255\n");
   for i in pic {
-    if i == BLACK { println!(" 1 1 1"); }
-    else { println!(" 0 0 0"); }
+    println!("{} {} {}", (i.x * 255.0) as i32, (i.y * 255.0) as i32, (i.z * 255.0) as i32);
   }
 }
