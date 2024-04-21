@@ -164,7 +164,7 @@ fn rasterize(camera: Camera, segments: &Vec<Vec2>, resolution_x: i32, resolution
   let bottom_left = Vec2::new2(-canvas_width / 2., -canvas_height / 2.);
   let mut ret = Vec::new();
   let epsilon = (dx * dx + dy * dy).sqrt();
-  for j in 0..resolution_y {
+  for j in (0..resolution_y).rev() {
     for i in 0..resolution_x {
       let p = bottom_left + Vec2::new2(i as f32 * dx, j as f32 * dy);
       ret.push(sample(p, &projected_segments, epsilon));
@@ -189,16 +189,16 @@ fn main() {
     brf, brb, trb, trf
   ];
   let camera = Camera {
-    position: Vec3::new3(1.5, -3.0, 1.5),
-    direction: Vec3::new3(-1., 1., -1.),
-    up: Vec3::new3(-0.5, 0.5, 1.),
+    position: Vec3::new3(3.0, -6.0, 3.0),
+    direction: Vec3::new3(-1.5, 3.0, -1.5),
+    up: Vec3::new3(-1.0 / 3.0, 1.0 / 3.0, 1.0),
     // position: Vec3::new3(0., -3., 0.),
     // direction: Vec3::new3(0., 1., 0.),
     // up: Vec3::new3(0., 0., 1.),
     near_cap: 0.25,
     far_cap: 1000.,
-    horizontal_fov: 3.14,
-    vertical_fov: 3.14 / 16. * 9.,
+    horizontal_fov: 3.14 / 6.,
+    vertical_fov: 3.14 / 6. / 16. * 9.,
   };
   let pic = rasterize(camera, &cube, 1920, 1080);
   println!("P3 1920 1080 1\n");
