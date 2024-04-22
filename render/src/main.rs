@@ -1,7 +1,9 @@
-use std::ops::{Add, Sub, Mul};
+use std::ops::{Add, Sub, Mul, Neg};
 use std::option::{Option};
+use rand;
+use std::default::Default;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Default)]
 struct Vec3 {
   x: f32,
   y: f32,
@@ -34,6 +36,8 @@ impl Vec3 {
   fn clear_z(self) -> Vec2 {
     Vec2::new2(self.x, self.y)
   }
+
+  const ZERO: Vec3 = Vec3 { x: 0.0, y: 0.0, z: 0.0 };
 }
 
 impl Add for Vec3 {
@@ -47,6 +51,13 @@ impl Sub for Vec3 {
   type Output = Vec3;
   fn sub(self, o: Vec3) -> Vec3 {
     self + o.neg()
+  }
+}
+
+impl Neg for Vec3 {
+  type Output = Vec3;
+  fn neg(self) -> Vec3 {
+    Vec3::ZERO - self
   }
 }
 
@@ -159,10 +170,45 @@ fn distance(point: Vec3, line: Line) -> Vec3 {
   foot - point
 }
 
-#[derive(Copy, Clone, Debug)]
+fn is_point_inside_triangle(point: Vec3, a: Vec3, b: Vec3, c: Vec3) -> bool {
+  let va = cross_product(b - a, point - a);
+  let vb = cross_product(c - b, point - b);
+  let vc = cross_product(a - c, point - c);
+  va * vb > 0.0 && vb * vc > 0.0
+}
+
+fn average_triangle<T>(point: Vec3, a: Vec3, va: T, b: Vec3, vb: T, c: Vec3, vc: T) -> T
+  where T: Mul<f32, Output = T> + Add<T, Output = T> {
+  let da = point - a;
+  let db = point - b;
+  let dc = point - c;
+  let pa = cross_product(db, dc).length();
+  let pb = cross_product(dc, da).length();
+  let pc = cross_product(da, db).length();
+  let denom = pa + pb + pc;
+  va * (pa / denom) + vb * (pb / denom) + vc * (pc / denom)
+}
+
+#[derive(Copy, Clone, Debug, Default)]
 struct Vertex {
   position: Vec3,
   color: Color,
+  normal: Vec3,
+}
+
+impl Vertex {
+  fn map_position<F>(self, f: F) -> Vertex
+    where F: FnOnce(Vec3) -> Vec3 {
+    let mut v = self;
+    v.position = f(v.position);
+    v
+  }
+
+  fn with_normal(self, normal: Vec3) -> Vertex {
+    let mut v = self;
+    v.normal = normal;
+    v
+  }
 }
 
 fn sample_segments(point: Vec2, segments: &[Vertex], epsilon: f32) -> Color {
@@ -178,34 +224,20 @@ fn sample_segments(point: Vec2, segments: &[Vertex], epsilon: f32) -> Color {
       return segments[i].color * (db / (da + db)) + segments[i + 1].color * (da / (da + db));
     }
   }
-  Vec3::new3(0.0, 0.0, 0.0)
+  Vec3::ZERO
 }
 
 fn sample_triangles(point: Vec2, triangles: &[Vertex]) -> Color {
-  let mut color = Vec3::new3(0.0, 0.0, 0.0);
+  let mut color = Vec3::ZERO;
   let mut depth = f32::MAX;
   for i in 0..triangles.len() - 2 {
     let a = triangles[i].position.clear_z();
     let b = triangles[i + 1].position.clear_z();
     let c = triangles[i + 2].position.clear_z();
-    let va = cross_product(b - a, point - a);
-    let vb = cross_product(c - b, point - b);
-    let vc = cross_product(a - c, point - c);
-    if va * vb > 0.0 && vb * vc > 0.0 {
-      let da = point - a;
-      let db = point - b;
-      let dc = point - c;
-      let pa = cross_product(db, dc).length();
-      let pb = cross_product(dc, da).length();
-      let pc = cross_product(da, db).length();
-      let denom = pa + pb + pc;
-      let c = triangles[i].color * (pa / denom)
-        + triangles[i + 1].color * (pb / denom)
-        + triangles[i + 2].color * (pc / denom);
-      let d = triangles[i].position.z * (pa / denom)
-        + triangles[i + 1].position.z * (pb / denom)
-        + triangles[i + 2].position.z * (pc / denom);
-      if d < depth { color = c; depth = d; }
+    if is_point_inside_triangle(point, a, b, c) {
+      let co = average_triangle(point, a, triangles[i].color, b, triangles[i + 1].color, c, triangles[i + 2].color);
+      let de = average_triangle(point, a, triangles[i].position.z, b, triangles[i + 1].position.z, c, triangles[i + 2].position.z);
+      if de < depth { color = co; depth = de; }
     }
   }
   color
@@ -219,7 +251,7 @@ enum RenderType {
 fn rasterize(camera: Camera, vertices: &[Vertex], resolution_x: i32, resolution_y: i32, render_type: RenderType) -> Vec<Color> {
   let mut projected_vertices = Vec::new();
   for v in vertices {
-    projected_vertices.push(Vertex { position: project(v.position, camera), color: v.color });
+    projected_vertices.push(v.map_position(|p| project(p, camera)));
   }
   let dx = 1.0 / resolution_x as f32;
   let dy = 1.0 / resolution_y as f32;
@@ -238,15 +270,110 @@ fn rasterize(camera: Camera, vertices: &[Vertex], resolution_x: i32, resolution_
   ret
 }
 
+// fn random_jiggle(v: Vec3) -> Vec3 {
+//   let r = v.length();
+//   let mut w = Vec3::new3(0.0, 0.0, 0.0);
+//   while v * w <= 0.0 {
+//     let a = rand::random::<f32>() * 2.0 * 3.14;
+//     let b = rand::random::<f32>() * 2.0 * 3.14;
+//     w = Vec3::new3(r * a.sin() * b.cos(), r * a.sin() * b.sin(), r * a.cos());
+//   }
+//   w
+// }
+
+#[derive(Copy, Clone, Debug, Default)]
+struct Triangle {
+  a: Vertex,
+  b: Vertex,
+  c: Vertex,
+  emitting: bool,
+}
+
+fn zip_product(a: Vec3, b: Vec3) -> Vec3 {
+  Vec3::new3(a.x * b.x, a.y * b.y, a.z * b.z)
+}
+
+fn sample_ray(point: Vec3, direction: Vec3, triangles: &[Triangle]) -> Color {
+  let mut dir = direction.normalize();
+  let mut pos = point;
+  let mut ret = Vec3::new3(1.0, 1.0, 1.0);
+  let mut dist = 0.0;
+  loop {
+    let mut hitpoint = Vec3::ZERO;
+    let mut depth = f32::MAX;
+    let mut target = Triangle::default();
+    for t in triangles {
+      let a = t.a.position;
+      let b = t.b.position;
+      let c = t.c.position;
+      match intersect(Line { point, direction: dir }, Plane { point: a, normal: cross_product(a - b, a - c) }) {
+        Some(p) => {
+          if (p - pos) * dir > 0.0 && is_point_inside_triangle(p, a, b, c) {
+            let d = (p - pos).length();
+            if d < depth {
+              hitpoint = p;
+              depth = d;
+              target = *t;
+            }
+          }
+        },
+        None => ()
+      };
+    }
+    if depth == f32::MAX {
+      ret = Vec3::ZERO;
+      break;
+    }
+    else {
+      dist += (pos - hitpoint).length();
+      let normal = average_triangle(hitpoint, target.a.position, target.a.normal, target.b.position, target.b.normal, target.c.position, target.c.normal);
+      let refl_dir = {
+        let x = -2.0 * (dir * normal) / (normal * normal);
+        dir + x * normal
+      };
+      let color = average_triangle(hitpoint, target.a.position, target.a.color, target.b.position, target.b.color, target.c.position, target.c.color);
+      ret = zip_product(ret, color);
+      if target.emitting { break; }
+      dir = refl_dir;
+      pos = hitpoint;
+      depth = f32::MAX;
+    }
+  }
+  ret = ret * (1.0 / (dist * dist));
+  if ret.x >= 1.0 { ret.x = 1.0; }
+  if ret.y >= 1.0 { ret.y = 1.0; }
+  if ret.z >= 1.0 { ret.z = 1.0; }
+  ret
+}
+
+fn ray_marching(camera: Camera, triangles: &[Triangle], resolution_x: i32, resolution_y: i32) -> Vec<Color> {
+  let canvas_width = (camera.horizontal_fov / 2.).tan() * camera.near_cap * 2.;
+  let canvas_height = (camera.vertical_fov / 2.).tan() * camera.near_cap * 2.;
+  let origin = camera.position + camera.direction.normalize() * camera.near_cap;
+  let y = camera.up.normalize();
+  let x = cross_product(camera.direction, y).normalize();
+  let dx = x * (canvas_width / resolution_x as f32);
+  let dy = y * (canvas_height / resolution_y as f32);
+  let bottom_left = origin - x * (canvas_width / 2.0) - y * (canvas_height / 2.0);
+  let mut ret = Vec::new();
+  for j in (0..resolution_y).rev() {
+    for i in 0..resolution_x {
+      let p = bottom_left + i as f32 * dx + j as f32 * dy;
+      ret.push(sample_ray(p, p - camera.position, &triangles));
+    }
+  }
+  ret
+}
+
 fn main() {
-  let tlf = Vertex { position: Vec3::new3(-0.5, -0.5, 0.5), color: Vec3::new3(0.0, 0.0, 1.0) };
-  let tlb = Vertex { position: Vec3::new3(-0.5, 0.5, 0.5), color: Vec3::new3(0.0, 1.0, 1.0) };
-  let trf = Vertex { position: Vec3::new3(0.5, -0.5, 0.5), color: Vec3::new3(1.0, 0.0, 1.0) };
-  let trb = Vertex { position: Vec3::new3(0.5, 0.5, 0.5), color: Vec3::new3(1.0, 1.0, 1.0) };
-  let blf = Vertex { position: Vec3::new3(-0.5, -0.5, -0.5), color: Vec3::new3(0.0, 0.0, 0.0) };
-  let blb = Vertex { position: Vec3::new3(-0.5, 0.5, -0.5), color: Vec3::new3(0.0, 1.0, 0.0) };
-  let brf = Vertex { position: Vec3::new3(0.5, -0.5, -0.5), color: Vec3::new3(1.0, 0.0, 0.0) };
-  let brb = Vertex { position: Vec3::new3(0.5, 0.5, -0.5), color: Vec3::new3(1.0, 1.0, 0.0) };
+  let tlf = Vertex { position: Vec3::new3(-0.5, -0.5, 0.5),  color: Vec3::new3(0.0, 0.0, 1.0), normal: Vec3::ZERO };
+  let tlb = Vertex { position: Vec3::new3(-0.5, 0.5, 0.5),   color: Vec3::new3(0.0, 1.0, 1.0), normal: Vec3::ZERO };
+  let trf = Vertex { position: Vec3::new3(0.5, -0.5, 0.5),   color: Vec3::new3(1.0, 0.0, 1.0), normal: Vec3::ZERO };
+  let trb = Vertex { position: Vec3::new3(0.5, 0.5, 0.5),    color: Vec3::new3(1.0, 1.0, 1.0), normal: Vec3::ZERO };
+  let blf = Vertex { position: Vec3::new3(-0.5, -0.5, -0.5), color: Vec3::new3(0.0, 0.0, 0.0), normal: Vec3::ZERO };
+  let blb = Vertex { position: Vec3::new3(-0.5, 0.5, -0.5),  color: Vec3::new3(0.0, 1.0, 0.0), normal: Vec3::ZERO };
+  let brf = Vertex { position: Vec3::new3(0.5, -0.5, -0.5),  color: Vec3::new3(1.0, 0.0, 0.0), normal: Vec3::ZERO };
+  let brb = Vertex { position: Vec3::new3(0.5, 0.5, -0.5),   color: Vec3::new3(1.0, 1.0, 0.0), normal: Vec3::ZERO };
   let cube_segments = vec![
     tlf, trf, brf, blf, tlf,
     tlb, trb, brb, blb, tlb,
@@ -256,7 +383,44 @@ fn main() {
   let cube_triangles = vec![
     tlf, blf, trf, brf, brb, blf, blb, tlf, tlb, trf, trb, brb, tlb, blb
   ];
-  let horizontal_fov = 3.14 * 0.6;
+  let cube_complete_triangles = {
+    let front = Vec3::new3(0.0, -1.0, 0.0);
+    let back  = Vec3::new3(0.0, 1.0, 0.0);
+    let left  = Vec3::new3(-1.0, 0.0, 0.0);
+    let right = Vec3::new3(1.0, 0.0, 0.0);
+    let up    = Vec3::new3(0.0, 0.0, 1.0);
+    let down  = Vec3::new3(0.0, 0.0, -1.0);
+    let brightness = 10.0;
+    let sky_len = 1e6;
+    vec![
+      Triangle { emitting: false, a: tlf.with_normal(front), b: trf.with_normal(front), c: blf.with_normal(front) },
+      Triangle { emitting: false, a: blf.with_normal(front), b: brf.with_normal(front), c: trf.with_normal(front) },
+      Triangle { emitting: false, a: tlb.with_normal(back), b: trb.with_normal(back), c: blb.with_normal(back) },
+      Triangle { emitting: false, a: blb.with_normal(back), b: brb.with_normal(back), c: trb.with_normal(back) },
+      Triangle { emitting: false, a: tlb.with_normal(left), b: tlf.with_normal(left), c: blf.with_normal(left) },
+      Triangle { emitting: false, a: tlb.with_normal(left), b: blb.with_normal(left), c: blf.with_normal(left) },
+      Triangle { emitting: false, a: trb.with_normal(right), b: trf.with_normal(right), c: brf.with_normal(right) },
+      Triangle { emitting: false, a: trb.with_normal(right), b: brb.with_normal(right), c: brf.with_normal(right) },
+      Triangle { emitting: false, a: tlf.with_normal(up), b: trf.with_normal(up), c: tlb.with_normal(up) },
+      Triangle { emitting: false, a: trb.with_normal(up), b: trf.with_normal(up), c: tlb.with_normal(up) },
+      Triangle { emitting: false, a: blf.with_normal(down), b: brf.with_normal(down), c: blb.with_normal(down) },
+      Triangle { emitting: false, a: brb.with_normal(down), b: brf.with_normal(down), c: blb.with_normal(down) },
+
+      Triangle {
+        emitting: true,
+        a: Vertex { position: Vec3::new3(-sky_len, -sky_len, 2.0), color: Vec3::new3(brightness, brightness, brightness), normal: down },
+        b: Vertex { position: Vec3::new3(sky_len, -sky_len, 2.0), color: Vec3::new3(brightness, brightness, brightness), normal: down },
+        c: Vertex { position: Vec3::new3(0.0, sky_len, 2.0), color: Vec3::new3(brightness, brightness, brightness), normal: down },
+      },
+      Triangle {
+        emitting: false,
+        a: Vertex { position: Vec3::new3(-sky_len, -sky_len, -1.0), color: Vec3::new3(1.0, 1.0, 1.0), normal: down },
+        b: Vertex { position: Vec3::new3(sky_len, -sky_len, -1.0), color: Vec3::new3(1.0, 1.0, 1.0), normal: down },
+        c: Vertex { position: Vec3::new3(0.0, sky_len, -1.0), color: Vec3::new3(1.0, 1.0, 1.0), normal: down },
+      },
+    ]
+  };
+  let horizontal_fov = 3.14 * 0.4;
   let camera = Camera {
     position: Vec3::new3(1.0, -2.0, 1.0),
     direction: Vec3::new3(-1.5, 3.0, -1.5),
@@ -269,7 +433,8 @@ fn main() {
     horizontal_fov,
     vertical_fov: ((horizontal_fov / 2.0).tan() * (9.0 / 16.0)).atan() * 2.0,
   };
-  let pic = rasterize(camera, &cube_triangles, 1920, 1080, RenderType::Triangles);
+  // let pic = rasterize(camera, &cube_triangles, 1920, 1080, RenderType::Triangles);
+  let pic = ray_marching(camera, &cube_complete_triangles, 1920, 1080);
   println!("P3 1920 1080 255\n");
   for i in pic {
     println!("{} {} {}", (i.x * 255.0) as i32, (i.y * 255.0) as i32, (i.z * 255.0) as i32);
