@@ -192,7 +192,12 @@ fn sample_triangles(point: Vec2, triangles: &[Vertex]) -> Color {
   color
 }
 
-fn rasterize(camera: Camera, vertices: &[Vertex], resolution_x: i32, resolution_y: i32) -> Vec<Color> {
+enum RenderType {
+  Triangles,
+  Segments,
+}
+
+fn rasterize(camera: Camera, vertices: &[Vertex], resolution_x: i32, resolution_y: i32, render_type: RenderType) -> Vec<Color> {
   let mut projected_vertices = Vec::new();
   for v in vertices {
     projected_vertices.push(Vertex { position: project(v.position, camera), color: v.color });
@@ -207,7 +212,10 @@ fn rasterize(camera: Camera, vertices: &[Vertex], resolution_x: i32, resolution_
   for j in (0..resolution_y).rev() {
     for i in 0..resolution_x {
       let p = bottom_left + Vec2::new2(i as f32 * dx, j as f32 * dy);
-      ret.push(sample_triangles(p, &projected_vertices));
+      match render_type {
+        RenderType::Segments => ret.push(sample_segments(p, &projected_vertices, epsilon)),
+        RenderType::Triangles => ret.push(sample_triangles(p, &projected_vertices)),
+      }
     }
   }
   ret
@@ -244,7 +252,7 @@ fn main() {
     horizontal_fov,
     vertical_fov: ((horizontal_fov / 2.0).tan() * (9.0 / 16.0)).atan() * 2.0,
   };
-  let pic = rasterize(camera, &cube_triangles, 1920, 1080);
+  let pic = rasterize(camera, &cube_triangles, 1920, 1080, RenderType::Triangles);
   println!("P3 1920 1080 255\n");
   for i in pic {
     println!("{} {} {}", (i.x * 255.0) as i32, (i.y * 255.0) as i32, (i.z * 255.0) as i32);
