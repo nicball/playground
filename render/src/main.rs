@@ -128,8 +128,27 @@ fn project(point: Vec3, camera: Camera) -> Vec3 { // (x, y, depth)
   let y = camera.up.normalize();
   let x = cross_product(camera.direction, y).normalize();
   let p = projected - origin;
-  Vec3::new3(p * x, p * y, (point - projected).length())
+  let canvas_width = (camera.horizontal_fov / 2.).tan() * camera.near_cap * 2.;
+  let canvas_height = (camera.vertical_fov / 2.).tan() * camera.near_cap * 2.;
+  Vec3::new3(p * x / canvas_width, p * y / canvas_height, (point - projected).length())
 }
+
+// fn angle_of(a: Vec3, zero: Vec3, up: Vec3) -> f32 { // up is really just up'ish
+//   let theta = (a.normalize() * zero.normalize()).acos();
+//   theta * (cross_product(zero, up).normalize() * a.normalize()).acos().signum()
+// }
+// 
+// fn project_fisheye(point: Vec3, camera: Camera) -> Vec3 {
+//   let center = camera.position;
+//   let radius = camera.near_cap;
+//   assert!((point - center).length() >= radius);
+//   assert!((point - center).normalize() * camera.direction.normalize() > 0.0);
+//   let equator_plane = Plane { point: center, normal: camera.up };
+//   let point_on_equator_plane = intersect(Line { point, direction: camera.up }, equator_plane).unwrap();
+//   let yaw = angle_of(point_on_equator_plane - center, camera.direction, camera.up);
+//   let pitch = angle_of(point - center, point_on_equator_plane - center, cross_product(camera.up, camera.direction));
+//   Vec3::new3(yaw / camera.horizontal_fov, pitch / camera.vertical_fov, (point - center).length() - radius)
+// }
 
 type Color = Vec3;
 
@@ -202,11 +221,9 @@ fn rasterize(camera: Camera, vertices: &[Vertex], resolution_x: i32, resolution_
   for v in vertices {
     projected_vertices.push(Vertex { position: project(v.position, camera), color: v.color });
   }
-  let canvas_width = (camera.horizontal_fov / 2.).tan() * camera.near_cap * 2.;
-  let canvas_height = (camera.vertical_fov / 2.).tan() * camera.near_cap * 2.;
-  let dx = canvas_width / resolution_x as f32;
-  let dy = canvas_height / resolution_y as f32;
-  let bottom_left = Vec2::new2(-canvas_width / 2., -canvas_height / 2.);
+  let dx = 1.0 / resolution_x as f32;
+  let dy = 1.0 / resolution_y as f32;
+  let bottom_left = Vec2::new2(-0.5, -0.5);
   let mut ret = Vec::new();
   let epsilon = (dx * dx + dy * dy).sqrt();
   for j in (0..resolution_y).rev() {
