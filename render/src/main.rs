@@ -231,17 +231,18 @@ fn main() {
   let cube_triangles = vec![
     tlf, blf, trf, brf, brb, blf, blb, tlf, tlb, trf, trb, brb, tlb, blb
   ];
+  let horizontal_fov = 3.14 * 0.6;
   let camera = Camera {
     position: Vec3::new3(1.0, -2.0, 1.0),
     direction: Vec3::new3(-1.5, 3.0, -1.5),
     up: Vec3::new3(-1.0 / 3.0, 1.0 / 3.0, 1.0),
-    // position: Vec3::new3(0., -3., 0.),
-    // direction: Vec3::new3(0., 1., 0.),
+    // position: Vec3::new3(-3., 0., 0.),
+    // direction: Vec3::new3(1., 0., 0.),
     // up: Vec3::new3(0., 0., 1.),
-    near_cap: 0.25,
+    near_cap: 0.5,
     far_cap: 1000.0,
-    horizontal_fov: 3.14 / 2.0,
-    vertical_fov: 3.14 / 2.0 / 16.0 * 9.0,
+    horizontal_fov,
+    vertical_fov: ((horizontal_fov / 2.0).tan() * (9.0 / 16.0)).atan() * 2.0,
   };
   let pic = rasterize(camera, &cube_triangles, 1920, 1080);
   println!("P3 1920 1080 255\n");
