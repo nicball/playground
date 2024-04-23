@@ -308,11 +308,11 @@ fn find_hit(point: Vec3, direction: Vec3, triangles: &[Triangle]) -> Option<(Vec
     let b = t.b.position;
     let c = t.c.position;
     if let Some(p) = intersect(Line { point, direction }, Plane { point: a, normal: cross_product(a - b, a - c) }) {
-      if (p - point) * direction > 0.0 && is_point_inside_triangle(p, a, b, c) {
+      let n = average_triangle(p, t.a.position, t.a.normal, t.b.position, t.b.normal, t.c.position, t.c.normal).normalize();
+      if (p - point) * direction > 0.0 && n * direction < 0.0 && is_point_inside_triangle(p, a, b, c) {
         let d = (p - point).length();
         if d < depth {
-          let n = average_triangle(p, t.a.position, t.a.normal, t.b.position, t.b.normal, t.c.position, t.c.normal).normalize();
-          hitpoint = p + 0.000001 * n;
+          hitpoint = p;
           depth = d;
           target = *t;
         }
