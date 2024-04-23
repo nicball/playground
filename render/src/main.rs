@@ -26,7 +26,13 @@ impl Vec3 {
   }
 
   fn normalize(self) -> Vec3 {
-    self * (1. / self.length())
+    let len = self.length();
+    if len != 0.0 {
+      self * (1. / len)
+    }
+    else {
+      self
+    }
   }
 
   fn neg(self) -> Vec3 {
@@ -293,53 +299,66 @@ fn zip_product(a: Vec3, b: Vec3) -> Vec3 {
   Vec3::new3(a.x * b.x, a.y * b.y, a.z * b.z)
 }
 
+fn find_hit(point: Vec3, direction: Vec3, triangles: &[Triangle]) -> Option<(Vec3, Triangle)> {
+  let mut depth = f32::MAX;
+  let mut hitpoint = Vec3::ZERO;
+  let mut target = Triangle::default();
+  for t in triangles {
+    let a = t.a.position;
+    let b = t.b.position;
+    let c = t.c.position;
+    if let Some(p) = intersect(Line { point, direction }, Plane { point: a, normal: cross_product(a - b, a - c) }) {
+      if (p - point) * direction > 0.0 && is_point_inside_triangle(p, a, b, c) {
+        let d = (p - point).length();
+        if d < depth {
+          hitpoint = p;
+          depth = d;
+          target = *t;
+        }
+      }
+    }
+  }
+  if depth == f32::MAX { None } else { Some((hitpoint, target)) }
+}
+
 fn sample_ray(point: Vec3, direction: Vec3, triangles: &[Triangle]) -> Color {
   let mut dir = direction.normalize();
   let mut pos = point;
   let mut ret = Vec3::new3(1.0, 1.0, 1.0);
   let mut dist = 0.0;
+  let mut num_iter = 0;
   loop {
-    let mut hitpoint = Vec3::ZERO;
-    let mut depth = f32::MAX;
-    let mut target = Triangle::default();
-    for t in triangles {
-      let a = t.a.position;
-      let b = t.b.position;
-      let c = t.c.position;
-      match intersect(Line { point, direction: dir }, Plane { point: a, normal: cross_product(a - b, a - c) }) {
-        Some(p) => {
-          if (p - pos) * dir > 0.0 && is_point_inside_triangle(p, a, b, c) {
-            let d = (p - pos).length();
-            if d < depth {
-              hitpoint = p;
-              depth = d;
-              target = *t;
-            }
-          }
-        },
-        None => ()
-      };
-    }
-    if depth == f32::MAX {
+    num_iter += 1;
+    if num_iter > 100 {
       ret = Vec3::ZERO;
       break;
     }
-    else {
-      dist += (pos - hitpoint).length();
-      let normal = average_triangle(hitpoint, target.a.position, target.a.normal, target.b.position, target.b.normal, target.c.position, target.c.normal);
-      let refl_dir = {
-        let x = -2.0 * (dir * normal) / (normal * normal);
-        dir + x * normal
-      };
-      let color = average_triangle(hitpoint, target.a.position, target.a.color, target.b.position, target.b.color, target.c.position, target.c.color);
-      ret = zip_product(ret, color);
-      if target.emitting { break; }
-      dir = refl_dir;
-      pos = hitpoint;
-      depth = f32::MAX;
+    match find_hit(pos, dir, triangles) {
+      None => {
+        let height = dir.z;
+        let skyblue = Vec3::new3(135.0, 206.0, 235.0) * (1.0 / 255.0);
+        let a = (height + 1.0) / 2.0;
+        ret = zip_product(ret, (1.0 - a) * Vec3::ZERO + a * skyblue);
+        break;
+      },
+      Some((hitpoint, target)) => {
+        dist += (pos - hitpoint).length();
+        let normal = average_triangle(hitpoint, target.a.position, target.a.normal, target.b.position, target.b.normal, target.c.position, target.c.normal);
+        let refl_dir = {
+          let x = -2.0 * (dir * normal) / (normal * normal);
+          dir + x * normal
+        };
+        let color = average_triangle(hitpoint, target.a.position, target.a.color, target.b.position, target.b.color, target.c.position, target.c.color);
+        ret = zip_product(ret, color);
+        if target.emitting { break; }
+        dir = refl_dir;
+        pos = hitpoint;
+      }
     }
   }
-  ret = ret * (1.0 / (dist * dist));
+  // if dist != 0.0 {
+  //   ret = ret * (1.0 / (dist * dist));
+  // }
   if ret.x >= 1.0 { ret.x = 1.0; }
   if ret.y >= 1.0 { ret.y = 1.0; }
   if ret.z >= 1.0 { ret.z = 1.0; }
@@ -391,7 +410,7 @@ fn main() {
     let up    = Vec3::new3(0.0, 0.0, 1.0);
     let down  = Vec3::new3(0.0, 0.0, -1.0);
     let brightness = 10.0;
-    let sky_len = 1e6;
+    let sky_len = 1e7;
     vec![
       Triangle { emitting: false, a: tlf.with_normal(front), b: trf.with_normal(front), c: blf.with_normal(front) },
       Triangle { emitting: false, a: blf.with_normal(front), b: brf.with_normal(front), c: trf.with_normal(front) },
@@ -406,18 +425,18 @@ fn main() {
       Triangle { emitting: false, a: blf.with_normal(down), b: brf.with_normal(down), c: blb.with_normal(down) },
       Triangle { emitting: false, a: brb.with_normal(down), b: brf.with_normal(down), c: blb.with_normal(down) },
 
-      Triangle {
-        emitting: true,
-        a: Vertex { position: Vec3::new3(-sky_len, -sky_len, 2.0), color: Vec3::new3(brightness, brightness, brightness), normal: down },
-        b: Vertex { position: Vec3::new3(sky_len, -sky_len, 2.0), color: Vec3::new3(brightness, brightness, brightness), normal: down },
-        c: Vertex { position: Vec3::new3(0.0, sky_len, 2.0), color: Vec3::new3(brightness, brightness, brightness), normal: down },
-      },
-      Triangle {
-        emitting: false,
-        a: Vertex { position: Vec3::new3(-sky_len, -sky_len, -1.0), color: Vec3::new3(1.0, 1.0, 1.0), normal: down },
-        b: Vertex { position: Vec3::new3(sky_len, -sky_len, -1.0), color: Vec3::new3(1.0, 1.0, 1.0), normal: down },
-        c: Vertex { position: Vec3::new3(0.0, sky_len, -1.0), color: Vec3::new3(1.0, 1.0, 1.0), normal: down },
-      },
+      // Triangle {
+      //   emitting: true,
+      //   a: Vertex { position: Vec3::new3(-sky_len, -sky_len, 2.0), color: Vec3::new3(brightness, brightness, brightness), normal: down },
+      //   b: Vertex { position: Vec3::new3(sky_len, -sky_len, 2.0), color: Vec3::new3(brightness, brightness, brightness), normal: down },
+      //   c: Vertex { position: Vec3::new3(0.0, sky_len, 2.0), color: Vec3::new3(brightness, brightness, brightness), normal: down },
+      // },
+      // Triangle {
+      //   emitting: false,
+      //   a: Vertex { position: Vec3::new3(-sky_len, -sky_len, -1.0), color: Vec3::new3(1.0, 1.0, 1.0), normal: down },
+      //   b: Vertex { position: Vec3::new3(sky_len, -sky_len, -1.0), color: Vec3::new3(1.0, 1.0, 1.0), normal: down },
+      //   c: Vertex { position: Vec3::new3(0.0, sky_len, -1.0), color: Vec3::new3(1.0, 1.0, 1.0), normal: down },
+      // },
     ]
   };
   let horizontal_fov = 3.14 * 0.4;
@@ -428,14 +447,19 @@ fn main() {
     // position: Vec3::new3(-3., 0., 0.),
     // direction: Vec3::new3(1., 0., 0.),
     // up: Vec3::new3(0., 0., 1.),
+    // position: Vec3::new3(0.0, 0.0, 2.0),
+    // direction: Vec3::new3(0.0, 0.0, -1.0),
+    // up: Vec3::new3(0.0, 1.0, 0.0),
     near_cap: 0.5,
     far_cap: 1000.0,
     horizontal_fov,
     vertical_fov: ((horizontal_fov / 2.0).tan() * (9.0 / 16.0)).atan() * 2.0,
   };
-  // let pic = rasterize(camera, &cube_triangles, 1920, 1080, RenderType::Triangles);
-  let pic = ray_marching(camera, &cube_complete_triangles, 1920, 1080);
-  println!("P3 1920 1080 255\n");
+  let width = 1920;
+  let height = 1080;
+  // let pic = rasterize(camera, &cube_triangles, width, height, RenderType::Triangles);
+  let pic = ray_marching(camera, &cube_complete_triangles, width, height);
+  println!("P3 {} {} 255\n", width, height);
   for i in pic {
     println!("{} {} {}", (i.x * 255.0) as i32, (i.y * 255.0) as i32, (i.z * 255.0) as i32);
   }
