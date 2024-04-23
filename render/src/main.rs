@@ -311,7 +311,8 @@ fn find_hit(point: Vec3, direction: Vec3, triangles: &[Triangle]) -> Option<(Vec
       if (p - point) * direction > 0.0 && is_point_inside_triangle(p, a, b, c) {
         let d = (p - point).length();
         if d < depth {
-          hitpoint = p;
+          let n = average_triangle(p, t.a.position, t.a.normal, t.b.position, t.b.normal, t.c.position, t.c.normal).normalize();
+          hitpoint = p + 0.000001 * n;
           depth = d;
           target = *t;
         }
@@ -409,7 +410,7 @@ fn main() {
     let right = Vec3::new3(1.0, 0.0, 0.0);
     let up    = Vec3::new3(0.0, 0.0, 1.0);
     let down  = Vec3::new3(0.0, 0.0, -1.0);
-    let brightness = 10.0;
+    let brightness = 1.0;
     let sky_len = 1e7;
     vec![
       Triangle { emitting: false, a: tlf.with_normal(front), b: trf.with_normal(front), c: blf.with_normal(front) },
