@@ -44,6 +44,7 @@ impl Vec3 {
   }
 
   const ZERO: Vec3 = Vec3 { x: 0.0, y: 0.0, z: 0.0 };
+  const ONE: Vec3 = Vec3 { x: 1.0, y: 1.0, z: 1.0 };
 }
 
 impl Add for Vec3 {
@@ -202,21 +203,6 @@ struct Vertex {
   normal: Vec3,
 }
 
-impl Vertex {
-  fn map_position<F>(self, f: F) -> Vertex
-    where F: FnOnce(Vec3) -> Vec3 {
-    let mut v = self;
-    v.position = f(v.position);
-    v
-  }
-
-  fn with_normal(self, normal: Vec3) -> Vertex {
-    let mut v = self;
-    v.normal = normal;
-    v
-  }
-}
-
 fn sample_segments(point: Vec2, segments: &[Vertex], epsilon: f32) -> Color {
   for i in 0..segments.len() - 1 {
     let a = segments[i].position.clear_z();
@@ -257,7 +243,7 @@ enum RenderType {
 fn rasterize(camera: Camera, vertices: &[Vertex], resolution_x: i32, resolution_y: i32, render_type: RenderType) -> Vec<Color> {
   let mut projected_vertices = Vec::new();
   for v in vertices {
-    projected_vertices.push(v.map_position(|p| project(p, camera)));
+    projected_vertices.push(Vertex { position: project(v.position, camera), .. *v});
   }
   let dx = 1.0 / resolution_x as f32;
   let dy = 1.0 / resolution_y as f32;
@@ -276,16 +262,17 @@ fn rasterize(camera: Camera, vertices: &[Vertex], resolution_x: i32, resolution_
   ret
 }
 
-// fn random_jiggle(v: Vec3) -> Vec3 {
-//   let r = v.length();
-//   let mut w = Vec3::new3(0.0, 0.0, 0.0);
-//   while v * w <= 0.0 {
-//     let a = rand::random::<f32>() * 2.0 * 3.14;
-//     let b = rand::random::<f32>() * 2.0 * 3.14;
-//     w = Vec3::new3(r * a.sin() * b.cos(), r * a.sin() * b.sin(), r * a.cos());
-//   }
-//   w
-// }
+fn random_unit_vector() -> Vec3 {
+  loop {
+    let x = rand::random::<f32>() * 2.0 - 1.0;
+    let y = rand::random::<f32>() * 2.0 - 1.0;
+    let z = rand::random::<f32>() * 2.0 - 1.0;
+    let v = Vec3::new3(x, y, z);
+    if v.length() <= 1.0 {
+      return v.normalize();
+    }
+  }
+}
 
 #[derive(Copy, Clone, Debug, Default)]
 struct Triangle {
@@ -293,6 +280,7 @@ struct Triangle {
   b: Vertex,
   c: Vertex,
   emitting: bool,
+  matt: i32,
 }
 
 fn zip_product(a: Vec3, b: Vec3) -> Vec3 {
@@ -308,8 +296,7 @@ fn find_hit(point: Vec3, direction: Vec3, triangles: &[Triangle]) -> Option<(Vec
     let b = t.b.position;
     let c = t.c.position;
     if let Some(p) = intersect(Line { point, direction }, Plane { point: a, normal: cross_product(a - b, a - c) }) {
-      let n = average_triangle(p, t.a.position, t.a.normal, t.b.position, t.b.normal, t.c.position, t.c.normal).normalize();
-      if (p - point) * direction > 0.0 && n * direction < 0.0 && is_point_inside_triangle(p, a, b, c) {
+      if (p - point) * direction > 0.0 && (p - point).length() > 0.00001 && is_point_inside_triangle(p, a, b, c) {
         let d = (p - point).length();
         if d < depth {
           hitpoint = p;
@@ -322,48 +309,44 @@ fn find_hit(point: Vec3, direction: Vec3, triangles: &[Triangle]) -> Option<(Vec
   if depth == f32::MAX { None } else { Some((hitpoint, target)) }
 }
 
-fn sample_ray(point: Vec3, direction: Vec3, triangles: &[Triangle]) -> Color {
+fn sample_ray(point: Vec3, direction: Vec3, triangles: &[Triangle], max_hit: i32) -> Color {
+  if max_hit <= 0 { return Vec3::ONE; }
   let mut dir = direction.normalize();
-  let mut pos = point;
-  let mut ret = Vec3::new3(1.0, 1.0, 1.0);
-  let mut dist = 0.0;
-  let mut num_iter = 0;
-  loop {
-    num_iter += 1;
-    if num_iter > 100 {
-      ret = Vec3::ZERO;
-      break;
-    }
-    match find_hit(pos, dir, triangles) {
-      None => {
-        let height = dir.z;
-        let skyblue = Vec3::new3(135.0, 206.0, 235.0) * (1.0 / 255.0);
-        let a = (height + 1.0) / 2.0;
-        ret = zip_product(ret, (1.0 - a) * Vec3::ZERO + a * skyblue);
-        break;
-      },
-      Some((hitpoint, target)) => {
-        dist += (pos - hitpoint).length();
-        let normal = average_triangle(hitpoint, target.a.position, target.a.normal, target.b.position, target.b.normal, target.c.position, target.c.normal);
+  match find_hit(point, dir, triangles) {
+    None => {
+      let height = dir.z;
+      let skyblue = Vec3::new3(135.0, 206.0, 235.0) * (1.0 / 255.0);
+      let a = (height + 1.0) / 2.0;
+      (1.0 - a) * Vec3::ZERO + a * skyblue
+    },
+    Some((hitpoint, target)) => {
+      let normal = average_triangle(hitpoint, target.a.position, target.a.normal, target.b.position, target.b.normal, target.c.position, target.c.normal);
+      let color = average_triangle(hitpoint, target.a.position, target.a.color, target.b.position, target.b.color, target.c.position, target.c.color);
+      if target.emitting {
+        color
+      }
+      else if target.matt > 0 {
+        let mut next_color = Vec3::ZERO;
+        for _ in 0 .. target.matt {
+          let refl_dir = normal.normalize() + random_unit_vector() - hitpoint;
+          next_color = next_color + sample_ray(hitpoint, refl_dir, triangles, max_hit - 1);
+        }
+        next_color = next_color * (1.0 / target.matt as f32);
+        zip_product(color, next_color)
+      }
+      else {
         let refl_dir = {
           let x = -2.0 * (dir * normal) / (normal * normal);
           dir + x * normal
         };
-        let color = average_triangle(hitpoint, target.a.position, target.a.color, target.b.position, target.b.color, target.c.position, target.c.color);
-        ret = zip_product(ret, color);
-        if target.emitting { break; }
-        dir = refl_dir;
-        pos = hitpoint;
+        zip_product(color, sample_ray(hitpoint, refl_dir, triangles, max_hit - 1))
       }
     }
   }
-  // if dist != 0.0 {
-  //   ret = ret * (1.0 / (dist * dist));
-  // }
-  if ret.x >= 1.0 { ret.x = 1.0; }
-  if ret.y >= 1.0 { ret.y = 1.0; }
-  if ret.z >= 1.0 { ret.z = 1.0; }
-  ret
+}
+
+fn gamma_correct(color: Color) -> Color {
+  Vec3::new3(color.x.sqrt(), color.y.sqrt(), color.z.sqrt())
 }
 
 fn ray_marching(camera: Camera, triangles: &[Triangle], resolution_x: i32, resolution_y: i32) -> Vec<Color> {
@@ -379,21 +362,22 @@ fn ray_marching(camera: Camera, triangles: &[Triangle], resolution_x: i32, resol
   for j in (0..resolution_y).rev() {
     for i in 0..resolution_x {
       let p = bottom_left + i as f32 * dx + j as f32 * dy;
-      ret.push(sample_ray(p, p - camera.position, &triangles));
+      ret.push(gamma_correct(sample_ray(p, p - camera.position, &triangles, 5)));
     }
+    eprintln!("finished rendering row {}", resolution_y - j);
   }
   ret
 }
 
 fn main() {
-  let tlf = Vertex { position: Vec3::new3(-0.5, -0.5, 0.5),  color: Vec3::new3(0.0, 0.0, 1.0), normal: Vec3::ZERO };
-  let tlb = Vertex { position: Vec3::new3(-0.5, 0.5, 0.5),   color: Vec3::new3(0.0, 1.0, 1.0), normal: Vec3::ZERO };
-  let trf = Vertex { position: Vec3::new3(0.5, -0.5, 0.5),   color: Vec3::new3(1.0, 0.0, 1.0), normal: Vec3::ZERO };
-  let trb = Vertex { position: Vec3::new3(0.5, 0.5, 0.5),    color: Vec3::new3(1.0, 1.0, 1.0), normal: Vec3::ZERO };
-  let blf = Vertex { position: Vec3::new3(-0.5, -0.5, -0.5), color: Vec3::new3(0.0, 0.0, 0.0), normal: Vec3::ZERO };
-  let blb = Vertex { position: Vec3::new3(-0.5, 0.5, -0.5),  color: Vec3::new3(0.0, 1.0, 0.0), normal: Vec3::ZERO };
-  let brf = Vertex { position: Vec3::new3(0.5, -0.5, -0.5),  color: Vec3::new3(1.0, 0.0, 0.0), normal: Vec3::ZERO };
-  let brb = Vertex { position: Vec3::new3(0.5, 0.5, -0.5),   color: Vec3::new3(1.0, 1.0, 0.0), normal: Vec3::ZERO };
+  let tlf = Vertex { position: Vec3::new3(-0.5, -0.5, 0.5),  color: Vec3::new3(0.0, 0.0, 1.0), .. Default::default() };
+  let tlb = Vertex { position: Vec3::new3(-0.5, 0.5, 0.5),   color: Vec3::new3(0.0, 1.0, 1.0), .. Default::default() };
+  let trf = Vertex { position: Vec3::new3(0.5, -0.5, 0.5),   color: Vec3::new3(1.0, 0.0, 1.0), .. Default::default() };
+  let trb = Vertex { position: Vec3::new3(0.5, 0.5, 0.5),    color: Vec3::new3(1.0, 1.0, 1.0), .. Default::default() };
+  let blf = Vertex { position: Vec3::new3(-0.5, -0.5, -0.5), color: Vec3::new3(0.0, 0.0, 0.0), .. Default::default() };
+  let blb = Vertex { position: Vec3::new3(-0.5, 0.5, -0.5),  color: Vec3::new3(0.0, 1.0, 0.0), .. Default::default() };
+  let brf = Vertex { position: Vec3::new3(0.5, -0.5, -0.5),  color: Vec3::new3(1.0, 0.0, 0.0), .. Default::default() };
+  let brb = Vertex { position: Vec3::new3(0.5, 0.5, -0.5),   color: Vec3::new3(1.0, 1.0, 0.0), .. Default::default() };
   let cube_segments = vec![
     tlf, trf, brf, blf, tlf,
     tlb, trb, brb, blb, tlb,
@@ -411,20 +395,20 @@ fn main() {
     let up    = Vec3::new3(0.0, 0.0, 1.0);
     let down  = Vec3::new3(0.0, 0.0, -1.0);
     let brightness = 1.0;
-    let sky_len = 1e7;
+    let sky_len = 5.0;
     vec![
-      Triangle { emitting: false, a: tlf.with_normal(front), b: trf.with_normal(front), c: blf.with_normal(front) },
-      Triangle { emitting: false, a: blf.with_normal(front), b: brf.with_normal(front), c: trf.with_normal(front) },
-      Triangle { emitting: false, a: tlb.with_normal(back), b: trb.with_normal(back), c: blb.with_normal(back) },
-      Triangle { emitting: false, a: blb.with_normal(back), b: brb.with_normal(back), c: trb.with_normal(back) },
-      Triangle { emitting: false, a: tlb.with_normal(left), b: tlf.with_normal(left), c: blf.with_normal(left) },
-      Triangle { emitting: false, a: tlb.with_normal(left), b: blb.with_normal(left), c: blf.with_normal(left) },
-      Triangle { emitting: false, a: trb.with_normal(right), b: trf.with_normal(right), c: brf.with_normal(right) },
-      Triangle { emitting: false, a: trb.with_normal(right), b: brb.with_normal(right), c: brf.with_normal(right) },
-      Triangle { emitting: false, a: tlf.with_normal(up), b: trf.with_normal(up), c: tlb.with_normal(up) },
-      Triangle { emitting: false, a: trb.with_normal(up), b: trf.with_normal(up), c: tlb.with_normal(up) },
-      Triangle { emitting: false, a: blf.with_normal(down), b: brf.with_normal(down), c: blb.with_normal(down) },
-      Triangle { emitting: false, a: brb.with_normal(down), b: brf.with_normal(down), c: blb.with_normal(down) },
+      Triangle { a: Vertex { normal: front, .. tlf }, b: Vertex { normal: front, .. trf }, c: Vertex { normal: front, .. blf }, .. Default::default() },
+      Triangle { a: Vertex { normal: front, .. blf }, b: Vertex { normal: front, .. brf }, c: Vertex { normal: front, .. trf }, .. Default::default() },
+      Triangle { a: Vertex { normal: back,  .. tlb }, b: Vertex { normal: back,  .. trb }, c: Vertex { normal: back,  .. blb }, .. Default::default() },
+      Triangle { a: Vertex { normal: back,  .. blb }, b: Vertex { normal: back,  .. brb }, c: Vertex { normal: back,  .. trb }, .. Default::default() },
+      Triangle { a: Vertex { normal: left,  .. tlb }, b: Vertex { normal: left,  .. tlf }, c: Vertex { normal: left,  .. blf }, .. Default::default() },
+      Triangle { a: Vertex { normal: left,  .. tlb }, b: Vertex { normal: left,  .. blb }, c: Vertex { normal: left,  .. blf }, .. Default::default() },
+      Triangle { a: Vertex { normal: right, .. trb }, b: Vertex { normal: right, .. trf }, c: Vertex { normal: right, .. brf }, .. Default::default() },
+      Triangle { a: Vertex { normal: right, .. trb }, b: Vertex { normal: right, .. brb }, c: Vertex { normal: right, .. brf }, .. Default::default() },
+      Triangle { a: Vertex { normal: up,    .. tlf }, b: Vertex { normal: up,    .. trf }, c: Vertex { normal: up,    .. tlb }, .. Default::default() },
+      Triangle { a: Vertex { normal: up,    .. trb }, b: Vertex { normal: up,    .. trf }, c: Vertex { normal: up,    .. tlb }, .. Default::default() },
+      Triangle { a: Vertex { normal: down,  .. blf }, b: Vertex { normal: down,  .. brf }, c: Vertex { normal: down,  .. blb }, .. Default::default() },
+      Triangle { a: Vertex { normal: down,  .. brb }, b: Vertex { normal: down,  .. brf }, c: Vertex { normal: down,  .. blb }, .. Default::default() },
 
       // Triangle {
       //   emitting: true,
@@ -432,25 +416,26 @@ fn main() {
       //   b: Vertex { position: Vec3::new3(sky_len, -sky_len, 2.0), color: Vec3::new3(brightness, brightness, brightness), normal: down },
       //   c: Vertex { position: Vec3::new3(0.0, sky_len, 2.0), color: Vec3::new3(brightness, brightness, brightness), normal: down },
       // },
-      // Triangle {
-      //   emitting: false,
-      //   a: Vertex { position: Vec3::new3(-sky_len, -sky_len, -1.0), color: Vec3::new3(1.0, 1.0, 1.0), normal: down },
-      //   b: Vertex { position: Vec3::new3(sky_len, -sky_len, -1.0), color: Vec3::new3(1.0, 1.0, 1.0), normal: down },
-      //   c: Vertex { position: Vec3::new3(0.0, sky_len, -1.0), color: Vec3::new3(1.0, 1.0, 1.0), normal: down },
-      // },
+      Triangle {
+        a: Vertex { position: Vec3::new3(0.0, sky_len, -1.0), color: Vec3::new3(0.2, 0.2, 0.2), normal: up },
+        b: Vertex { position: Vec3::new3(sky_len * (0.75_f32.sqrt()), sky_len * -0.5, -1.0), color: Vec3::new3(0.2, 0.2, 0.2), normal: up },
+        c: Vertex { position: Vec3::new3(sky_len * -(0.75_f32.sqrt()), sky_len * -0.5, -1.0), color: Vec3::new3(0.2, 0.2, 0.2), normal: up },
+        matt: 10,
+        .. Default::default()
+      },
     ]
   };
-  let horizontal_fov = 3.14 * 0.4;
+  let horizontal_fov = 3.14 * 0.6;
   let camera = Camera {
-    position: Vec3::new3(1.0, -2.0, 1.0),
-    direction: Vec3::new3(-1.5, 3.0, -1.5),
-    up: Vec3::new3(-1.0 / 3.0, 1.0 / 3.0, 1.0),
+    // position: Vec3::new3(2.5, -5.0, 2.5),
+    // direction: Vec3::new3(-1.5, 3.0, -1.5),
+    // up: Vec3::new3(-1.0 / 3.0, 1.0 / 3.0, 1.0),
     // position: Vec3::new3(-3., 0., 0.),
     // direction: Vec3::new3(1., 0., 0.),
     // up: Vec3::new3(0., 0., 1.),
-    // position: Vec3::new3(0.0, 0.0, 2.0),
-    // direction: Vec3::new3(0.0, 0.0, -1.0),
-    // up: Vec3::new3(0.0, 1.0, 0.0),
+    position: Vec3::new3(0.0, 0.0, 8.0),
+    direction: Vec3::new3(0.0, 0.0, -1.0),
+    up: Vec3::new3(0.0, 1.0, 0.0),
     near_cap: 0.5,
     far_cap: 1000.0,
     horizontal_fov,
