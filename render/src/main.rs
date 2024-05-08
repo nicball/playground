@@ -362,7 +362,14 @@ fn ray_marching(camera: Camera, triangles: &[Triangle], resolution_x: i32, resol
   for j in (0..resolution_y).rev() {
     for i in 0..resolution_x {
       let p = bottom_left + i as f32 * dx + j as f32 * dy;
-      ret.push(gamma_correct(sample_ray(p, p - camera.position, &triangles, 5)));
+      let mut color = Vec3::ZERO;
+      for s in 0..10 {
+        let theta = s as f32 * 2.0 * 3.14 / 10.0;
+        let dp = dx * 0.3 * theta.cos() + dy * 0.3 * theta.sin();
+        color = color + sample_ray(p + dp, p + dp - camera.position, &triangles, 5);
+      }
+      color = color * (1.0 / 10.0);
+      ret.push(gamma_correct(color));
     }
     eprintln!("finished rendering row {}", resolution_y - j);
   }
@@ -420,22 +427,22 @@ fn main() {
         a: Vertex { position: Vec3::new3(0.0, sky_len, -1.0), color: Vec3::new3(0.2, 0.2, 0.2), normal: up },
         b: Vertex { position: Vec3::new3(sky_len * (0.75_f32.sqrt()), sky_len * -0.5, -1.0), color: Vec3::new3(0.2, 0.2, 0.2), normal: up },
         c: Vertex { position: Vec3::new3(sky_len * -(0.75_f32.sqrt()), sky_len * -0.5, -1.0), color: Vec3::new3(0.2, 0.2, 0.2), normal: up },
-        matt: 10,
+        matt: 1,
         .. Default::default()
       },
     ]
   };
   let horizontal_fov = 3.14 * 0.6;
   let camera = Camera {
-    // position: Vec3::new3(2.5, -5.0, 2.5),
-    // direction: Vec3::new3(-1.5, 3.0, -1.5),
-    // up: Vec3::new3(-1.0 / 3.0, 1.0 / 3.0, 1.0),
+    position: Vec3::new3(2.5, -5.0, 2.5),
+    direction: Vec3::new3(-1.5, 3.0, -1.5),
+    up: Vec3::new3(-1.0 / 3.0, 1.0 / 3.0, 1.0),
     // position: Vec3::new3(-3., 0., 0.),
     // direction: Vec3::new3(1., 0., 0.),
     // up: Vec3::new3(0., 0., 1.),
-    position: Vec3::new3(0.0, 0.0, 8.0),
-    direction: Vec3::new3(0.0, 0.0, -1.0),
-    up: Vec3::new3(0.0, 1.0, 0.0),
+    // position: Vec3::new3(0.0, 0.0, 8.0),
+    // direction: Vec3::new3(0.0, 0.0, -1.0),
+    // up: Vec3::new3(0.0, 1.0, 0.0),
     near_cap: 0.5,
     far_cap: 1000.0,
     horizontal_fov,
