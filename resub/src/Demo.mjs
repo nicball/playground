@@ -732,12 +732,22 @@ var program_1 = {
             _1: "value"
           }
         }, {
-          TAG: "Sel",
+          TAG: "App",
           _0: {
+            TAG: "App",
+            _0: {
+              TAG: "Ref",
+              _0: "f"
+            },
+            _1: {
+              TAG: "Ref",
+              _0: "y"
+            }
+          },
+          _1: {
             TAG: "Ref",
             _0: "x"
-          },
-          _1: "default"
+          }
         })
   }
 };

@@ -23,8 +23,8 @@ function truncateStr(str, len) {
   else return str;
 }
 
-async function forwardMsg(msg, chatid) {
-  return await (await fetch('https://api.telegram.org/bot692538686:AAHpvMdOh1dTdL4NqPEOki8uQJc-zS9PQbs/forwardMessage', {
+async function forwardMsg(token, msg, chatid) {
+  return await (await fetch(`https://api.telegram.org/bot${token}/forwardMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -143,7 +143,7 @@ export default {
           else if (sth.sender_chat) {
             name = getChatName(sth.sender_chat);
           }
-          let fwdres = await forwardMsg(sth, 674060548);
+          let fwdres = await forwardMsg(env.TGBOT_TOKEN, sth, 674060548);
           if (!fwdres.ok) {
             res = '保存失败';
             console.log(fwdres);
@@ -168,7 +168,7 @@ export default {
         let errs = [];
         try {
           for (let { fwdchatid, fwdmsgid } of await saySth(env.saysth, keys)) {
-            let res = await forwardMsg({ chat: { id: fwdchatid }, message_id: fwdmsgid }, msg.chat.id);
+            let res = await forwardMsg(env.TGBOT_TOKEN, { chat: { id: fwdchatid }, message_id: fwdmsgid }, msg.chat.id);
             if (!res.ok) errs.push(res);
           }
           if (errs.length != 0) throw errs;

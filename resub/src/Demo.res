@@ -281,19 +281,18 @@ let add = (a, b) => App(App(Ref("+"), a), b)
 // let f = \x -> \y ->
 //   if x.cond
 //     then x.value + y.value
-//     else x.default
+//     else f y x
 // in f
 
 let somercd = Rcd(Dict.fromArray([ ("cond", Lit(LitBool(false))), ("value", Lit(LitInt(42))), ("default", Lit(LitInt(1))) ]))
 let program =
-  Let(
-    "f",
+  Let("f",
     Lam("x",
       Lam("y",
         if_(
           Sel(Ref("x"), "cond"),
           add(Sel(Ref("x"), "value"), Sel(Ref("y"), "value")),
-          Sel(Ref("x"), "default")))),
+          App(App(Ref("f"), Ref("y")), Ref("x"))))),
     Ref("f"))
 
 let rec show_ty = ty =>
