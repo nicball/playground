@@ -224,6 +224,7 @@ export default {
         catch (e) {
           res = e.toString();
         }
+        res = '<blockquote expandable>' + res + '</blockquote>';
         return jsonResponse({
             method: 'sendMessage',
             chat_id: msg.chat.id,
