@@ -50,7 +50,7 @@ function parseCommand(msg) {
     let args = msg.text.substring(ent.offset + ent.length);
     return [cmd, args];
   }
-  throw 'impossible';
+  throw ['', msg.text];
 }
 
 async function addSth(db, fwdchatid, fwdmsgid, sendername, summary) {
@@ -76,11 +76,11 @@ async function searchSth(db, key) {
 
 async function searchHistory(db, key, gid) {
   let esckey = key.replaceAll('.', '..').replaceAll('%', '.%').replaceAll('_', '._');
-  let glob = '%' + esckey.split(" ").join("%") + '%';
+  let glob = '%' + esckey.split(' ').join('%') + '%';
   return (await db.prepare(`
       SELECT tg_group.name AS groupName, tg_user.name AS userName, msgtext AS message, message.gid AS groupId, message.mid AS messageId
       FROM message LEFT JOIN tg_user ON message.uid = tg_user.uid LEFT JOIN tg_group ON message.gid = tg_group.gid
-      WHERE msgtext LIKE ? ESCAPE '.' ${gid ? "AND message.gid = " + gid : ""}
+      WHERE msgtext LIKE ? ESCAPE '.' ${gid ? 'AND message.gid = ' + gid : ''}
       ORDER BY sendat ASC
       LIMIT 100
     `).bind(glob)
@@ -127,7 +127,7 @@ export default {
         let res = '';
         if (!sth) res = '?';
         else {
-          let summary = sth.text || sth.caption || "[媒体]";
+          let summary = sth.text || sth.caption || '[媒体]';
           let name = '';
           if (sth.forward_origin) {
             let origin = sth.forward_origin;
@@ -210,12 +210,12 @@ export default {
         }
         let key = args;
         let res = '';
-        let escape = (str) => str.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+        let escape = (str) => str.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('#', '&#35;');
         try {
-          for (let { groupName, userName, message, groupId, messageId } of await searchHistory(env.saysth, key, msg.chat.type == "supergroup" ? msg.chat.id : false)) {
+          for (let { groupName, userName, message, groupId, messageId } of await searchHistory(env.saysth, key, msg.chat.type == 'supergroup' ? msg.chat.id : false)) {
             let line = `<b>${escape(userName)}</b>: ${escape(truncateStr(message, 50))} <a href="https://t.me/c/${-groupId-1000000000000}/${messageId}">⤴</a>\n\n`;
-            if (msg.chat.type != "supergroup") {
-              line = `<i>${escape(groupName)}</i> ` + line;
+            if (msg.chat.type != 'supergroup') {
+              line = `<i>${truncateStr(escape(groupName), 20)}</i> ` + line;
             }
             if ((res + line).length > 4000) break;
             res += line;
@@ -224,13 +224,16 @@ export default {
         catch (e) {
           res = e.toString();
         }
-        res = '<blockquote expandable>' + res + '</blockquote>';
+        if (res === '')
+          res = '没搜到哦';
+        else
+          res = '<blockquote expandable>' + res + '</blockquote>';
         return jsonResponse({
             method: 'sendMessage',
             chat_id: msg.chat.id,
-            text: res === '' ? '没搜到哦' : res,
+            text: res,
             reply_to_message_id: msg.message_id,
-            parse_mode: "HTML"
+            parse_mode: 'HTML'
         });
       }
 
