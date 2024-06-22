@@ -217,7 +217,7 @@ export default {
             if (msg.chat.type != 'supergroup') {
               line = `<i>${truncateStr(escape(groupName), 20)}</i> ` + line;
             }
-            if ((res + line).length > 4000) break;
+            if ((res + line).length > 3940) break;
             res += line;
           }
         }
