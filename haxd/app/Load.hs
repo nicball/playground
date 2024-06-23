@@ -16,10 +16,11 @@ import Data.ByteString.Lazy ( ByteString )
 import qualified System.IO as IO
 import Data.Int ( Int64 )
 import qualified Data.Attoparsec.Text.Lazy as Parsec
-import Data.Bits (Bits)
+import Data.Bits ( Bits )
 import Text.Printf ( printf )
 import Data.Foldable ( traverse_ )
 import Control.Monad ( when )
+import Data.Char ( isSpace )
 
 load :: LoadArgs -> IO ()
 load args = output =<< input
@@ -60,7 +61,7 @@ xxdToBytes = BS.concat . go 0
     go _ [] = []
 
 parseXXD :: Text -> [Line]
-parseXXD = map parseLine . filter (not . Text.null) . Text.lines
+parseXXD = map parseLine . filter (not . Text.all isSpace) . Text.lines
 
 data Line = Line
   { lineOffset :: Int64
