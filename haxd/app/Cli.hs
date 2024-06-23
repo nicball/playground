@@ -35,6 +35,7 @@ data LoadArgs = LoadArgs
 
 data EditArgs = EditArgs
   { editNumColumns :: Word64
+  , editPatchMode :: Bool
   , editGroupSize :: Word64
   , editInputFile :: String
   }
@@ -145,6 +146,11 @@ editArgs
       <> value 16
       <> help "number of octets shown on each line, defaults to 16"
       <> metavar "NUM_COLUMNS"
+      )
+    <*> switch
+      ( short 'p'
+      <> long "patch-mode"
+      <> help "enable patch mode. See load --help"
       )
     <*> option auto
       ( short 'g'

@@ -2,6 +2,9 @@
 
 module Load
   ( load
+  , patchXXD
+  , parseXXD
+  , xxdToBytes
   ) where
 
 import Cli ( LoadArgs(..) )
