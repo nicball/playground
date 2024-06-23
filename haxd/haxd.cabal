@@ -73,6 +73,7 @@ executable haxd
                     , bytestring
                     , text
                     , utf8-string
+                    , attoparsec
 
     -- Directories containing source files.
     hs-source-dirs:   app

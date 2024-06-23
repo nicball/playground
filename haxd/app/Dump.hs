@@ -41,7 +41,7 @@ bytesToXXD numColumns groupSize initialOffset = loop initialOffset . groupN (fro
 
     displayLine :: Int64 -> ByteString -> Text
     displayLine offset line
-      = Text.pack $ printf "%08x: %-*s %s\n" offset hexWidth (hex line) (ascii line)
+      = Text.pack $ printf "%08x: %-*s  %s\n" offset hexWidth (hex line) (ascii line)
       where
         hexWidth = numColumns * 2 + numGroups - 1
         numGroups = - (numColumns `div` (- groupSize)) -- truncate to +inf

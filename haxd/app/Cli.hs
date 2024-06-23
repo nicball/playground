@@ -26,7 +26,9 @@ data DumpArgs = DumpArgs
   deriving Show
 
 data LoadArgs = LoadArgs
-  { loadInputFile :: Maybe String
+  { loadOffset :: Word64
+  , loadInputFile :: Maybe String
+  , loadOutputFile :: Maybe String
   }
   deriving Show
 
@@ -85,7 +87,7 @@ dumpArgs
     <*> option auto
       ( short 'o'
       <> long "offset"
-      <> value 5
+      <> value 0
       <> help "add OFFSET to the displayed file position"
       <> metavar "OFFSET"
       )
@@ -103,9 +105,29 @@ dumpArgs
 loadArgs :: Parser LoadArgs
 loadArgs
   = LoadArgs
-    <$> optional
+    <$> option auto
+      ( short 'o'
+      <> long "offset"
+      <> value 0
+      <> help "add OFFSET to file positions in the hex dump"
+      <> metavar "OFFSET"
+      )
+    <*> optional
       (argument str
-        ( help "input file, defaults to stdin"
+        ( help
+          ( "input file, defaults to stdin."
+          <> " Note that everything after hexadecimal data is ignored."
+          <> " This also means that changes to the printable ASCII columns are always ignored."
+          )
+        <> metavar "FILE"
+        ))
+    <*> optional
+      (argument str
+        ( help
+          ( "output file, defaults to stdout."
+          <> " If an output file is specified, then the line numbers at the start of each hex dump line may be out of order, lines may be missing, or overlapping."
+          <> " Otherwise only gaps are allowed, which will be filled by null-bytes."
+          )
         <> metavar "FILE"
         ))
 
