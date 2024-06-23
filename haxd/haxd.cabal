@@ -74,6 +74,9 @@ executable haxd
                     , text
                     , utf8-string
                     , attoparsec
+                    , filepath
+                    , process
+                    , unix
 
     -- Directories containing source files.
     hs-source-dirs:   app

@@ -27,6 +27,7 @@ data DumpArgs = DumpArgs
 
 data LoadArgs = LoadArgs
   { loadOffset :: Word64
+  , loadPatchMode :: Bool
   , loadInputFile :: Maybe String
   , loadOutputFile :: Maybe String
   }
@@ -94,12 +95,12 @@ dumpArgs
     <*> optional
       (argument str
         ( help "input file, defaults to stdin"
-        <> metavar "FILE"
+        <> metavar "INPUT"
         ))
     <*> optional
       (argument str
         ( help "output file, defaults to stdout"
-        <> metavar "FILE"
+        <> metavar "OUTPUT"
         ))
 
 loadArgs :: Parser LoadArgs
@@ -112,6 +113,15 @@ loadArgs
       <> help "add OFFSET to file positions in the hex dump"
       <> metavar "OFFSET"
       )
+    <*> switch
+      ( short 'p'
+      <> long "patch-mode"
+      <> help
+        ( "enable patch mode"
+        <> " Under patch mode, the line numbers at the start of each hex dump line may be out of order, lines may be missing, or overlapping."
+        <> " Otherwise only gaps are allowed, which will be filled by null-bytes."
+        )
+      )
     <*> optional
       (argument str
         ( help
@@ -119,16 +129,12 @@ loadArgs
           <> " Note that everything after hexadecimal data is ignored."
           <> " This also means that changes to the printable ASCII columns are always ignored."
           )
-        <> metavar "FILE"
+        <> metavar "INPUT"
         ))
     <*> optional
       (argument str
-        ( help
-          ( "output file, defaults to stdout."
-          <> " If an output file is specified, then the line numbers at the start of each hex dump line may be out of order, lines may be missing, or overlapping."
-          <> " Otherwise only gaps are allowed, which will be filled by null-bytes."
-          )
-        <> metavar "FILE"
+        ( help "output file, defaults to stdout."
+        <> metavar "OUTPUT"
         ))
 
 editArgs :: Parser EditArgs

@@ -21,13 +21,17 @@ import Control.Monad ( when )
 load :: LoadArgs -> IO ()
 load args = output =<< input
   where
-    input = map (addOffset . parseLine) . Text.lines <$> inputText
+    input = map addOffset . parseXXD <$> inputText
     inputText = maybe Text.getContents Text.readFile . loadInputFile $ args
     addOffset (Line offset content) = Line (offset + additionalOffset) content
     additionalOffset = fromIntegral . loadOffset $ args
+    transform file
+      = if loadPatchMode args
+        then patchXXD file
+        else BS.hPut file . xxdToBytes
     output = case loadOutputFile args of
-      Just path -> IO.withBinaryFile path IO.WriteMode . flip patchXXD
-      Nothing -> BS.putStr . xxdToBytes
+      Just path -> IO.withBinaryFile path IO.WriteMode . flip transform
+      Nothing -> transform IO.stdout
 
 patchXXD :: IO.Handle -> [Line] -> IO ()
 patchXXD file = traverse_ execLine
@@ -51,6 +55,9 @@ xxdToBytes = BS.concat . go 0
           then BS.replicate (nextOffset - offset) 0 : go nextOffset arg
           else content : go (offset + BS.length content) rest
     go _ [] = []
+
+parseXXD :: Text -> [Line]
+parseXXD = map parseLine . Text.lines
 
 data Line = Line
   { lineOffset :: Int64
