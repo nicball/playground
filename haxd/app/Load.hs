@@ -60,7 +60,7 @@ xxdToBytes = BS.concat . go 0
     go _ [] = []
 
 parseXXD :: Text -> [Line]
-parseXXD = map parseLine . Text.lines
+parseXXD = map parseLine . filter (not . Text.null) . Text.lines
 
 data Line = Line
   { lineOffset :: Int64
