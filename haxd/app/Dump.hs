@@ -2,6 +2,7 @@
 
 module Dump
   ( dump
+  , bytesToXXD
   ) where
 
 import Cli ( DumpArgs(..) )
@@ -13,23 +14,27 @@ import Data.Int ( Int64 )
 import Text.Printf ( printf )
 import Data.Text.Lazy ( Text )
 import qualified Data.Text.Lazy as Text
+import qualified Data.Text.Lazy.IO as Text
 
 dump :: DumpArgs -> IO ()
-dump args = printf "%s" =<< bytesToXXD args <$> input
+dump args = output =<< bytesToXXD numColumns groupSize offset . trunc <$> input
   where
-   input = maybe BS.getContents BS.readFile (dumpInputFile args)
+   input = maybe BS.getContents BS.readFile . dumpInputFile $ args
+   output = maybe Text.putStr Text.writeFile . dumpOutputFile $ args
+   trunc = maybe id (BS.take . fromIntegral) . dumpLength $ args
+   numColumns = fromIntegral . dumpNumColumns $ args
+   groupSize = fromIntegral . dumpGroupSize $ args
+   offset = fromIntegral . dumpOffset $ args
 
-bytesToXXD :: DumpArgs -> ByteString -> Text
-bytesToXXD args input = loop 0 $ groupN (fromIntegral . dumpNumColumns $ args) input
+bytesToXXD :: Int -> Int -> Int64 -> ByteString -> Text
+bytesToXXD numColumns groupSize initialOffset = loop initialOffset . groupN (fromIntegral numColumns)
   where
     loop :: Int64 -> [ByteString] -> Text
     loop offset (line : rest) = displayLine offset line <> loop (offset + BS.length line) rest
     loop _ [] = ""
 
     hex :: ByteString -> Text
-    hex = Text.intercalate " " . map (displayBy (Text.pack . printf "%02X")) . groupN gs
-      where
-        gs = fromIntegral . dumpGroupSize $ args
+    hex = Text.intercalate " " . map (displayBy (Text.pack . printf "%02X")) . groupN (fromIntegral groupSize)
 
     ascii :: ByteString -> Text
     ascii = displayBy displayByte
@@ -38,18 +43,15 @@ bytesToXXD args input = loop 0 $ groupN (fromIntegral . dumpNumColumns $ args) i
     displayLine offset line
       = Text.pack $ printf "%08x: %-*s %s\n" offset hexWidth (hex line) (ascii line)
       where
-        hexWidth = c * 2 + numGroups - 1
-        numGroups = - (c `div` (- g))
-        c, g :: Int
-        c = fromIntegral . dumpNumColumns $ args
-        g = fromIntegral . dumpGroupSize $ args
+        hexWidth = numColumns * 2 + numGroups - 1
+        numGroups = - (numColumns `div` (- groupSize)) -- truncate to +inf
 
     displayBy :: (Word8 -> Text) -> ByteString -> Text
     displayBy f bytes = Text.concat . map f . BS.unpack $ bytes
 
     groupN :: Int64 -> ByteString -> [ByteString]
     groupN n str
-      = if BS.length curr == 0
+      = if BS.null curr
         then []
         else curr : groupN n rest
       where

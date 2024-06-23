@@ -7,6 +7,7 @@ module Cli
   ) where
 
 import Options.Applicative
+import Data.Word ( Word64 )
 
 data CliArgs
   = Dump DumpArgs
@@ -15,9 +16,12 @@ data CliArgs
   deriving Show
 
 data DumpArgs = DumpArgs
-  { dumpNumColumns :: Word
-  , dumpGroupSize :: Word
+  { dumpNumColumns :: Word64
+  , dumpGroupSize :: Word64
+  , dumpLength :: Maybe Word64
+  , dumpOffset :: Word64
   , dumpInputFile :: Maybe String
+  , dumpOutputFile :: Maybe String
   }
   deriving Show
 
@@ -27,8 +31,8 @@ data LoadArgs = LoadArgs
   deriving Show
 
 data EditArgs = EditArgs
-  { editNumColumns :: Word
-  , editGroupSize :: Word
+  { editNumColumns :: Word64
+  , editGroupSize :: Word64
   , editInputFile :: String
   }
   deriving Show
@@ -72,8 +76,27 @@ dumpArgs
       <> metavar "GROUPSIZE"
       )
     <*> optional
+      (option auto
+        ( short 'l'
+        <> long "length"
+        <> help "stop after writing LENGTH octets"
+        <> metavar "LENGTH"
+        ))
+    <*> option auto
+      ( short 'o'
+      <> long "offset"
+      <> value 5
+      <> help "add OFFSET to the displayed file position"
+      <> metavar "OFFSET"
+      )
+    <*> optional
       (argument str
         ( help "input file, defaults to stdin"
+        <> metavar "FILE"
+        ))
+    <*> optional
+      (argument str
+        ( help "output file, defaults to stdout"
         <> metavar "FILE"
         ))
 
