@@ -19,12 +19,12 @@ import qualified Data.Text.Lazy.IO as Text
 dump :: DumpArgs -> IO ()
 dump args = output =<< bytesToXXD numColumns groupSize offset . trunc <$> input
   where
-   input = maybe BS.getContents BS.readFile . dumpInputFile $ args
-   output = maybe Text.putStr Text.writeFile . dumpOutputFile $ args
-   trunc = maybe id (BS.take . fromIntegral) . dumpLength $ args
-   numColumns = fromIntegral . dumpNumColumns $ args
-   groupSize = fromIntegral . dumpGroupSize $ args
-   offset = fromIntegral . dumpOffset $ args
+   input      = maybe BS.getContents BS.readFile  . dumpInputFile  $ args
+   output     = maybe Text.putStr Text.writeFile  . dumpOutputFile $ args
+   trunc      = maybe id (BS.take . fromIntegral) . dumpLength     $ args
+   numColumns = fromIntegral                      . dumpNumColumns $ args
+   groupSize  = fromIntegral                      . dumpGroupSize  $ args
+   offset     = fromIntegral                      . dumpOffset     $ args
 
 bytesToXXD :: Int -> Int -> Int64 -> ByteString -> Text
 bytesToXXD numColumns groupSize initialOffset = loop initialOffset . groupN (fromIntegral numColumns)
