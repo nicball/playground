@@ -27,11 +27,12 @@ edit args = do
     Text.hPutStr dumpFile
       . bytesToXXD (fromIntegral . editNumColumns $ args) (fromIntegral . editGroupSize $ args) 0
       =<< BS.readFile inputPath
-    IO.hClose dumpFile
+    IO.hFlush dumpFile
     editor <- getEnv "EDITOR"
     callProcess editor [ dumpPath ]
     withBinaryTempFileToPersist directory fileName inputPath \_ loadFile -> do
-      xxd <- parseXXD <$> Text.readFile dumpPath
+      IO.hSeek dumpFile IO.AbsoluteSeek 0
+      xxd <- parseXXD <$> Text.hGetContents dumpFile
       if editPatchMode args
         then patchXXD loadFile xxd
         else BS.hPut loadFile . xxdToBytes $ xxd
