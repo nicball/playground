@@ -19,22 +19,22 @@ import qualified Data.Text.Lazy.IO as Text
 dump :: DumpArgs -> IO ()
 dump args = output =<< bytesToXXD numColumns groupSize offset . trunc <$> input
   where
-   input      = maybe BS.getContents BS.readFile  . dumpInputFile  $ args
-   output     = maybe Text.putStr Text.writeFile  . dumpOutputFile $ args
-   trunc      = maybe id (BS.take . fromIntegral) . dumpLength     $ args
-   numColumns = fromIntegral                      . dumpNumColumns $ args
-   groupSize  = fromIntegral                      . dumpGroupSize  $ args
-   offset     = fromIntegral                      . dumpOffset     $ args
+   input      = maybe BS.getContents BS.readFile . dumpInputFile  $ args
+   output     = maybe Text.putStr Text.writeFile . dumpOutputFile $ args
+   trunc      = maybe id BS.take                 . dumpLength     $ args
+   numColumns = dumpNumColumns args
+   groupSize  = min (dumpGroupSize args) numColumns
+   offset     = dumpOffset     args
 
-bytesToXXD :: Int -> Int -> Int64 -> ByteString -> Text
-bytesToXXD numColumns groupSize initialOffset = loop initialOffset . groupN (fromIntegral numColumns)
+bytesToXXD :: Int64 -> Int64 -> Int64 -> ByteString -> Text
+bytesToXXD numColumns groupSize initialOffset = loop initialOffset . groupN numColumns
   where
     loop :: Int64 -> [ByteString] -> Text
     loop offset (line : rest) = displayLine offset line <> loop (offset + BS.length line) rest
     loop _ [] = ""
 
     hex :: ByteString -> Text
-    hex = Text.intercalate " " . map (displayBy (Text.pack . printf "%02X")) . groupN (fromIntegral groupSize)
+    hex = Text.intercalate " " . map (displayBy (Text.pack . printf "%02X")) . groupN groupSize
 
     ascii :: ByteString -> Text
     ascii = displayBy displayByte
@@ -59,7 +59,7 @@ bytesToXXD numColumns groupSize initialOffset = loop initialOffset . groupN (fro
 
     displayByte :: Word8 -> Text
     displayByte b
-      = if isAsciiGraphic b then Text.singleton (chr . fromIntegral $ b) else "."
+      = if isXXDAscii b then Text.singleton (chr . fromIntegral $ b) else "."
 
-    isAsciiGraphic :: Word8 -> Bool
-    isAsciiGraphic i = 0x21 <= i && i <= 0x7e || i == 0x20
+    isXXDAscii :: Word8 -> Bool
+    isXXDAscii i = 0x21 <= i && i <= 0x7e || i == 0x20

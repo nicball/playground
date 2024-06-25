@@ -19,10 +19,13 @@ import qualified Data.ByteString.Lazy as BS
 
 edit :: EditArgs -> IO ()
 edit args = do
-  let inputPath = editInputFile args
+  let
+    inputPath = editInputFile args
+    numColumns = editNumColumns args
+    groupSize = min (editGroupSize args) numColumns
   withBinaryTempFile inputPath \dumpPath dumpFile -> do
     Text.hPutStr dumpFile
-      . bytesToXXD (fromIntegral . editNumColumns $ args) (fromIntegral . editGroupSize $ args) 0
+      . bytesToXXD numColumns groupSize 0
       =<< BS.readFile inputPath
     IO.hFlush dumpFile
     editor <- getEnv "EDITOR"

@@ -28,7 +28,7 @@ load args = output =<< input
     input = map addOffset . parseXXD <$> inputText
     inputText = maybe Text.getContents Text.readFile . loadInputFile $ args
     addOffset (Line offset content) = Line (offset + additionalOffset) content
-    additionalOffset = fromIntegral . loadOffset $ args
+    additionalOffset = loadOffset args
     transform file
       = if loadPatchMode args
         then patchXXD file
@@ -42,10 +42,10 @@ patchXXD file = traverse_ execLine
   where
     execLine (Line offset content) = do
       IO.hSeek file IO.AbsoluteSeek (fromIntegral offset)
-      currPos <- IO.hTell file
-      when (currPos < fromIntegral offset)
+      currPos <- fromIntegral <$> IO.hTell file
+      when (currPos < offset)
         . BS.hPut file
-        . BS.replicate (offset - fromIntegral currPos)
+        . BS.replicate (offset - currPos)
         $ 0
       BS.hPut file content
 

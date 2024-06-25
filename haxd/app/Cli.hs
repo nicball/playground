@@ -1,3 +1,5 @@
+{-# LANGUAGE BlockArguments #-}
+
 module Cli
   ( CliArgs(..)
   , DumpArgs(..)
@@ -7,7 +9,8 @@ module Cli
   ) where
 
 import Options.Applicative
-import Data.Word ( Word64 )
+import Data.Int ( Int64 )
+import Text.Read ( readMaybe )
 
 data CliArgs
   = Dump DumpArgs
@@ -16,17 +19,17 @@ data CliArgs
   deriving Show
 
 data DumpArgs = DumpArgs
-  { dumpNumColumns :: Word64
-  , dumpGroupSize :: Word64
-  , dumpLength :: Maybe Word64
-  , dumpOffset :: Word64
+  { dumpNumColumns :: Int64
+  , dumpGroupSize :: Int64
+  , dumpLength :: Maybe Int64
+  , dumpOffset :: Int64
   , dumpInputFile :: Maybe String
   , dumpOutputFile :: Maybe String
   }
   deriving Show
 
 data LoadArgs = LoadArgs
-  { loadOffset :: Word64
+  { loadOffset :: Int64
   , loadPatchMode :: Bool
   , loadInputFile :: Maybe String
   , loadOutputFile :: Maybe String
@@ -34,9 +37,9 @@ data LoadArgs = LoadArgs
   deriving Show
 
 data EditArgs = EditArgs
-  { editNumColumns :: Word64
+  { editNumColumns :: Int64
   , editPatchMode :: Bool
-  , editGroupSize :: Word64
+  , editGroupSize :: Int64
   , editInputFile :: String
   }
   deriving Show
@@ -67,14 +70,14 @@ cliArgs
 dumpArgs :: Parser DumpArgs
 dumpArgs
   = DumpArgs
-    <$> option auto
+    <$> option positiveInt64
       ( short 'c'
       <> long "num-columns"
       <> value 16
       <> help "Number of bytes shown on each line, defaults to 16."
       <> metavar "NUM_COLUMNS"
       )
-    <*> option auto
+    <*> option positiveInt64
       ( short 'g'
       <> long "group-size"
       <> value 2
@@ -82,7 +85,7 @@ dumpArgs
       <> metavar "GROUPSIZE"
       )
     <*> optional
-      (option auto
+      (option positiveInt64
         ( short 'l'
         <> long "length"
         <> help "Stop after writing LENGTH bytes."
@@ -143,7 +146,7 @@ loadArgs
 editArgs :: Parser EditArgs
 editArgs
   = EditArgs
-    <$> option auto
+    <$> option positiveInt64
       ( short 'c'
       <> long "num-colomns"
       <> value 16
@@ -155,7 +158,7 @@ editArgs
       <> long "patch-mode"
       <> help "Enable patch mode. See `haxl load --help`."
       )
-    <*> option auto
+    <*> option positiveInt64
       ( short 'g'
       <> long "group-size"
       <> value 2
@@ -166,3 +169,9 @@ editArgs
       ( help "The file to edit."
       <> metavar "FILE")
 
+positiveInt64 :: ReadM Int64
+positiveInt64 = maybeReader \s -> do
+  (w :: Int64) <- readMaybe s
+  if w <= 0
+    then Nothing
+    else pure . fromIntegral $ w
