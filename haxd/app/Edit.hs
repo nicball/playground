@@ -24,7 +24,7 @@ edit args = do
     numColumns = editNumColumns args
     groupSize = min (editGroupSize args) numColumns
   withBinaryTempFile inputPath \dumpPath dumpFile -> do
-    Text.hPutStr dumpFile
+    BS.hPut dumpFile
       . bytesToXXD numColumns groupSize 0
       =<< BS.readFile inputPath
     IO.hFlush dumpFile
