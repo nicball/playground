@@ -22,10 +22,9 @@ import qualified System.IO as IO
 import Utils ( groupNS, integralFromByteString, integralToByteString, padLeft )
 
 load :: LoadArgs -> IO ()
-load args = output =<< input
+load args = output . map addOffset . parseXXD =<< input
   where
-    input = map addOffset . parseXXD <$> inputText
-    inputText = maybe BS.getContents BS.readFile . loadInputFile $ args
+    input = maybe BS.getContents BS.readFile . loadInputFile $ args
     addOffset (Line offset content) = Line (offset + additionalOffset) content
     additionalOffset = loadOffset args
     transform file
@@ -67,6 +66,7 @@ data Line = Line
   , lineContent :: ByteString
   }
 
+{-# INLINE parseLine #-}
 parseLine :: ByteString -> Line
 parseLine line = Line offset content
   where

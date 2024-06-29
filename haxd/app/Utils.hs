@@ -15,6 +15,7 @@ import qualified Data.ByteString.Lazy as BS
 import Data.Bits ( Bits( shift, (.&.) ) )
 import Data.Int ( Int64 )
 
+{-# INLINE integralToByteString #-}
 integralToByteString :: (Integral a, Bits a) => a -> BSS.ByteString
 integralToByteString 0 = ""
 integralToByteString n = integralToByteString (shift n (-4)) <> digitToByteString (n .&. 0xF)
@@ -37,6 +38,7 @@ integralToByteString n = integralToByteString (shift n (-4)) <> digitToByteStrin
     digitToByteString 15 = "F"
     digitToByteString _ = error "what the fuck?"
 
+{-# INLINE integralFromByteString #-}
 integralFromByteString :: (Integral a, Bits a) => BSS.ByteString -> a
 integralFromByteString = go 0 . BSSC.unpack
   where
@@ -67,6 +69,7 @@ integralFromByteString = go 0 . BSSC.unpack
       'F' -> 15
       _ -> error "invalid hex digit"
 
+{-# INLINE padLeft #-}
 padLeft :: Char -> Int -> BSS.ByteString -> BSS.ByteString
 padLeft p width text
   = if len < width
@@ -75,6 +78,7 @@ padLeft p width text
   where
     len = BSS.length text
 
+{-# INLINE padRight #-}
 padRight :: Char -> Int -> BSS.ByteString -> BSS.ByteString
 padRight p width text
   = if len < width
@@ -83,6 +87,7 @@ padRight p width text
   where
     len = BSS.length text
 
+{-# INLINE groupN #-}
 groupN :: Int64 -> BS.ByteString -> [BSS.ByteString]
 groupN n str
   = if BS.null curr
@@ -91,6 +96,7 @@ groupN n str
   where
     (curr, rest) = BS.splitAt n str
 
+{-# INLINE groupNS #-}
 groupNS :: Int -> BSS.ByteString -> [BSS.ByteString]
 groupNS n str
   = if BSS.null curr
