@@ -8,25 +8,24 @@ module Load
   ) where
 
 import Cli ( LoadArgs(..) )
-import qualified Data.Text.Lazy as Text
-import Data.Text.Lazy ( Text )
-import qualified Data.Text.Lazy.IO as Text
-import qualified Data.ByteString.Lazy as BS
-import Data.ByteString.Lazy ( ByteString )
-import qualified System.IO as IO
-import Data.Int ( Int64 )
-import qualified Data.Attoparsec.Text.Lazy as Parsec
-import Data.Bits ( Bits )
-import Text.Printf ( printf )
-import Data.Foldable ( traverse_ )
 import Control.Monad ( when )
+import Data.ByteString.Lazy ( ByteString )
 import Data.Char ( isSpace )
+import Data.Foldable ( traverse_ )
+import Data.Int ( Int64 )
+import qualified Data.ByteString as BSS
+import qualified Data.ByteString.Char8 as BSSC
+import qualified Data.ByteString.Lazy as BS
+import qualified Data.ByteString.Lazy.Char8 as BSC
+import qualified Data.ByteString.UTF8 as UTF8S
+import qualified System.IO as IO
+import Utils ( groupNS, integralFromByteString, integralToByteString, padLeft )
 
 load :: LoadArgs -> IO ()
 load args = output =<< input
   where
     input = map addOffset . parseXXD <$> inputText
-    inputText = maybe Text.getContents Text.readFile . loadInputFile $ args
+    inputText = maybe BS.getContents BS.readFile . loadInputFile $ args
     addOffset (Line offset content) = Line (offset + additionalOffset) content
     additionalOffset = loadOffset args
     transform file
@@ -54,29 +53,24 @@ xxdToBytes = BS.concat . go 0
   where
     go offset arg@(Line nextOffset content : rest)
       = if offset > nextOffset
-        then error (printf "%08x: overlapping not allowed" nextOffset)
+        then error (UTF8S.toString (padLeft '0' 8 (integralToByteString nextOffset)) <> ": overlapping not allowed")
         else if offset < nextOffset
           then BS.replicate (nextOffset - offset) 0 : go nextOffset arg
           else content : go (offset + BS.length content) rest
     go _ [] = []
 
-parseXXD :: Text -> [Line]
-parseXXD = map parseLine . filter (not . Text.all isSpace) . Text.lines
+parseXXD :: ByteString -> [Line]
+parseXXD = map parseLine . filter (not . BSC.all isSpace) . BSC.lines
 
 data Line = Line
   { lineOffset :: Int64
   , lineContent :: ByteString
   }
 
-parseLine :: Text -> Line
+parseLine :: ByteString -> Line
 parseLine line = Line offset content
   where
-    (offsetPart, rest) = Text.breakOn ": " line
-    offset = parseHex offsetPart
-    hexPart = fst . Text.breakOn "  " . Text.drop 2 $ rest
-    content = BS.pack . map parseHex . Text.chunksOf 2 . Text.filter (/= ' ') $ hexPart
-
-    fromRight (Left s) = error s
-    fromRight (Right a) = a
-    parseHex :: (Integral a, Bits a) => Text -> a
-    parseHex = fromRight . Parsec.parseOnly Parsec.hexadecimal
+    (offsetPart, rest) = BSSC.breakSubstring ": " . BS.toStrict $ line
+    offset = integralFromByteString  offsetPart
+    hexPart = fst . BSSC.breakSubstring "  " . BSS.drop 2 $ rest
+    content = BS.pack . map integralFromByteString . groupNS 2 . BSSC.filter (/= ' ') $ hexPart

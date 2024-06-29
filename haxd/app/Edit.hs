@@ -5,17 +5,16 @@ module Edit
   ) where
 
 import Cli ( EditArgs(..) )
+import Control.Arrow ( (&&&) )
+import Control.Exception ( finally, onException )
 import Dump ( bytesToXXD )
 import Load ( xxdToBytes, patchXXD, parseXXD )
+import qualified Data.ByteString.Lazy as BS
 import qualified System.FilePath as Path
-import Control.Arrow ( (&&&) )
 import qualified System.IO as IO
+import qualified System.Posix.Files as Posix
 import System.Environment ( getEnv )
 import System.Process ( callProcess )
-import qualified System.Posix.Files as Posix
-import Control.Exception ( finally, onException )
-import qualified Data.Text.Lazy.IO as Text
-import qualified Data.ByteString.Lazy as BS
 
 edit :: EditArgs -> IO ()
 edit args = do
@@ -32,7 +31,7 @@ edit args = do
     callProcess editor [ dumpPath ]
     withBinaryTempFileToPersist inputPath \_ loadFile -> do
       IO.hSeek dumpFile IO.AbsoluteSeek 0
-      xxd <- parseXXD <$> Text.hGetContents dumpFile
+      xxd <- parseXXD <$> BS.hGetContents dumpFile
       if editPatchMode args
         then patchXXD loadFile xxd
         else BS.hPut loadFile . xxdToBytes $ xxd
