@@ -8,15 +8,11 @@ module Dump
 import Cli ( DumpArgs(..) )
 import Data.ByteString.Lazy ( ByteString )
 import qualified Data.ByteString.Lazy as BS
--- import qualified Data.ByteString.Lazy.UTF8 as UTF8
-import qualified Data.ByteString.Lazy.Char8 as BSC
+import qualified Data.ByteString as BSS
+import qualified Data.ByteString.Char8 as BSSC
 import Data.Char ( chr )
 import Data.Word ( Word8 )
 import Data.Int ( Int64 )
--- import Text.Printf ( printf )
--- import Data.Text.Lazy ( Text )
--- import qualified Data.Text.Lazy as Text
--- import qualified Data.Text.Lazy.IO as Text
 import Data.Bits ( Bits(shift, (.&.)) )
 
 dump :: DumpArgs -> IO ()
@@ -32,15 +28,14 @@ dump args = output . bytesToXXD numColumns groupSize offset . trunc =<< input
 bytesToXXD :: Int64 -> Int64 -> Int64 -> ByteString -> ByteString
 bytesToXXD numColumns groupSize initialOffset = loop initialOffset . groupN numColumns
   where
-    loop :: Int64 -> [ByteString] -> ByteString
-    loop offset (line : rest) = displayLine offset line <> loop (offset + BS.length line) rest
+    loop :: Int64 -> [BSS.ByteString] -> ByteString
+    loop offset (line : rest) = BS.fromStrict (displayLine offset line) <> loop (offset + fromIntegral (BSS.length line)) rest
     loop _ [] = ""
 
-    hex :: ByteString -> ByteString
-    -- hex = ByteString.intercalate " " . map (displayBy (ByteString.pack . printf "%02X")) . groupN groupSize
-    hex = BS.intercalate " " . map (BS.concatMap (padLeft '0' 2 . integralToByteString)) . groupN groupSize
+    hex :: BSS.ByteString -> BSS.ByteString
+    hex = BSS.intercalate " " . map (BSS.concatMap (padLeft '0' 2 . integralToByteString)) . groupNS (fromIntegral groupSize)
 
-    integralToByteString :: (Integral a, Bits a) => a -> ByteString
+    integralToByteString :: (Integral a, Bits a) => a -> BSS.ByteString
     integralToByteString 0 = ""
     integralToByteString n = integralToByteString (shift n (-4)) <> digitToByteString (n .&. 0xF)
       where
@@ -62,44 +57,51 @@ bytesToXXD numColumns groupSize initialOffset = loop initialOffset . groupN numC
         digitToByteString 15 = "F"
         digitToByteString _ = error "what the fuck?"
 
-    padLeft :: Char -> Int64 -> ByteString -> ByteString
+    padLeft :: Char -> Int -> BSS.ByteString -> BSS.ByteString
     padLeft p width text
       = if len < width
-        then BSC.replicate (width - len) p <> text
+        then BSSC.replicate (width - len) p <> text
         else text
       where
-        len = BS.length text
+        len = BSS.length text
 
-    padRight :: Char -> Int64 -> ByteString -> ByteString
+    padRight :: Char -> Int -> BSS.ByteString -> BSS.ByteString
     padRight p width text
       = if len < width
-        then text <> BSC.replicate (width - len) p
+        then text <> BSSC.replicate (width - len) p
         else text
       where
-        len = BS.length text
+        len = BSS.length text
 
-    ascii :: ByteString -> ByteString
-    ascii = BS.concatMap displayByte
+    ascii :: BSS.ByteString -> BSS.ByteString
+    ascii = BSS.concatMap displayByte
 
-    displayLine :: Int64 -> ByteString -> ByteString
+    displayLine :: Int64 -> BSS.ByteString -> BSS.ByteString
     displayLine offset line
-      -- = ByteString.pack $ printf "%08x: %-*s  %s\n" offset hexWidth (hex line) (ascii line)
       = padLeft '0' 8 (integralToByteString offset) <> ": " <> padRight ' ' hexWidth (hex line) <> "  " <> ascii line <> "\n"
       where
-        hexWidth = numColumns * 2 + numGroups - 1
+        hexWidth = fromIntegral (numColumns * 2 + numGroups - 1)
         numGroups = - (numColumns `div` (- groupSize)) -- truncate to +inf
 
-    groupN :: Int64 -> ByteString -> [ByteString]
+    groupN :: Int64 -> ByteString -> [BSS.ByteString]
     groupN n str
       = if BS.null curr
         then []
-        else curr : groupN n rest
+        else BS.toStrict curr : groupN n rest
       where
         (curr, rest) = BS.splitAt n str
 
-    displayByte :: Word8 -> ByteString
+    groupNS :: Int -> BSS.ByteString -> [BSS.ByteString]
+    groupNS n str
+      = if BSS.null curr
+        then []
+        else curr : groupNS n rest
+      where
+        (curr, rest) = BSS.splitAt n str
+
+    displayByte :: Word8 -> BSS.ByteString
     displayByte b
-      = if isXXDAscii b then BSC.singleton (chr . fromIntegral $ b) else "."
+      = if isXXDAscii b then BSSC.singleton (chr . fromIntegral $ b) else "."
 
     isXXDAscii :: Word8 -> Bool
     isXXDAscii i = 0x21 <= i && i <= 0x7e || i == 0x20
