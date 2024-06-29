@@ -1,5 +1,5 @@
 { mkDerivation, attoparsec, base, bytestring, filepath, lib
-, optparse-applicative, process, text, unix, utf8-string
+, optparse-applicative, process, text, unix
 }:
 mkDerivation {
   pname = "haxd";
@@ -9,7 +9,7 @@ mkDerivation {
   isExecutable = true;
   executableHaskellDepends = [
     attoparsec base bytestring filepath optparse-applicative process
-    text unix utf8-string
+    text unix
   ];
   description = "haxd: simplistic hexdump processor and editor";
   license = lib.licenses.agpl3Only;

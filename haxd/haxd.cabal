@@ -72,7 +72,7 @@ executable haxd
                     , optparse-applicative
                     , bytestring
                     , text
-                    , utf8-string
+                    -- , utf8-string
                     , attoparsec
                     , filepath
                     , process
