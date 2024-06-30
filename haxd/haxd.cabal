@@ -75,6 +75,7 @@ executable haxd
                     , filepath
                     , process
                     , unix
+                    , conduit
 
     -- Directories containing source files.
     hs-source-dirs:   app

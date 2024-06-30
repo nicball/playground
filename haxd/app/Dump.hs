@@ -13,17 +13,41 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Builder as BB
 import Data.List ( intercalate )
 import Utils ( chunksOf, chunksOfBL )
-import System.IO ( stdout )
+import Conduit
+import Data.Char ( ord )
+import Data.Foldable ( traverse_ )
 
 dump :: DumpArgs -> IO ()
-dump args = output . bytesToXXD numColumns groupSize offset . trunc =<< input
+dump args
+  = runConduitRes $ input .| chunksOfCE (fromIntegral . dumpNumColumns $ args) .| line .| output
   where
-   input      = maybe BL.getContents BL.readFile . dumpInputFile $ args
-   output     = maybe (BB.hPutBuilder stdout) BB.writeFile . dumpOutputFile $ args
-   trunc      = maybe id BL.take . dumpLength $ args
-   numColumns = dumpNumColumns args
-   groupSize  = min (dumpGroupSize args) numColumns
-   offset     = dumpOffset args
+    input :: MonadResource m => ConduitT () BS.ByteString m ()
+    input = maybe stdinC sourceFile . dumpInputFile $ args
+
+    output :: MonadResource m => ConduitT BS.ByteString Void m ()
+    output = maybe stdoutC sinkFile . dumpOutputFile $ args
+
+    line :: Monad m => ConduitT BS.ByteString BS.ByteString m ()
+    line = (getZipConduit . traverse_ ZipConduit $ [offset, mapC (const ": "), hex, mapC (const "  "), ascii, mapC (const "\n")])
+
+    offset :: Monad m => ConduitT BS.ByteString BS.ByteString m ()
+    offset = scanlC ((. fromIntegral . BS.length) . (+)) (dumpOffset args) .| mapC (runBuilder BB.int32HexFixed . fromIntegral)
+
+    hexGroup :: Monad m => ConduitT BS.ByteString BS.ByteString m ()
+    hexGroup = concatMapCE (runBuilder BB.word8HexFixed)
+
+    hex :: Monad m => ConduitT BS.ByteString BS.ByteString m ()
+    hex = chunksOfCE (fromIntegral . dumpGroupSize $ args) .| hexGroup .| intersperseC " "
+
+    ascii :: Monad m => ConduitT BS.ByteString BS.ByteString m ()
+    ascii = omapCE (\c -> if isXXDAscii c then c else fromIntegral . ord $ '.')
+
+    isXXDAscii :: Word8 -> Bool
+    isXXDAscii i = 0x21 <= i && i <= 0x7e || i == 0x20
+
+    runBuilder :: (a -> BB.Builder) -> a -> BS.ByteString
+    runBuilder f = BL.toStrict . BB.toLazyByteString . f
+
 
 bytesToXXD :: Int64 -> Int64 -> Int64 -> BL.ByteString -> BB.Builder
 bytesToXXD numColumns groupSize initialOffset = loop initialOffset . chunksOfBL numColumns
