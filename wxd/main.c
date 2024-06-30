@@ -91,7 +91,10 @@ void dump() {
         exit(EXIT_FAILURE);
       }
       if (r < g_num_colums) {
-        if (!feof(g_input_file)) perror("input error");
+        if (!feof(g_input_file)) {
+          perror("input error");
+          exit(EXIT_FAILURE);
+        }
         else break;
       }
     }
