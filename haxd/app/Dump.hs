@@ -27,16 +27,16 @@ dump args
     output :: MonadResource m => ConduitT BS.ByteString Void m ()
     output = maybe stdoutC sinkFile . dumpOutputFile $ args
 
-    line :: Monad m => ConduitT BS.ByteString BS.ByteString m ()
+    line :: PrimMonad m => ConduitT BS.ByteString BS.ByteString m ()
     line = (getZipConduit . traverse_ ZipConduit $ [offset, mapC (const ": "), hex, mapC (const "  "), ascii, mapC (const "\n")])
 
-    offset :: Monad m => ConduitT BS.ByteString BS.ByteString m ()
-    offset = scanlC ((. fromIntegral . BS.length) . (+)) (dumpOffset args) .| mapC (runBuilder BB.int32HexFixed . fromIntegral)
+    offset :: PrimMonad m => ConduitT BS.ByteString BS.ByteString m ()
+    offset = scanlC ((. fromIntegral . BS.length) . (+)) (dumpOffset args) .| mapC (BB.int32HexFixed . fromIntegral) .| builderToByteString
 
-    hexGroup :: Monad m => ConduitT BS.ByteString BS.ByteString m ()
-    hexGroup = concatMapCE (runBuilder BB.word8HexFixed)
+    hexGroup :: PrimMonad m => ConduitT BS.ByteString BS.ByteString m ()
+    hexGroup = concatMapCE BB.word8HexFixed .| builderToByteString
 
-    hex :: Monad m => ConduitT BS.ByteString BS.ByteString m ()
+    hex :: PrimMonad m => ConduitT BS.ByteString BS.ByteString m ()
     hex = chunksOfCE (fromIntegral . dumpGroupSize $ args) .| hexGroup .| intersperseC " "
 
     ascii :: Monad m => ConduitT BS.ByteString BS.ByteString m ()
@@ -44,10 +44,6 @@ dump args
 
     isXXDAscii :: Word8 -> Bool
     isXXDAscii i = 0x21 <= i && i <= 0x7e || i == 0x20
-
-    runBuilder :: (a -> BB.Builder) -> a -> BS.ByteString
-    runBuilder f = BL.toStrict . BB.toLazyByteString . f
-
 
 bytesToXXD :: Int64 -> Int64 -> Int64 -> BL.ByteString -> BB.Builder
 bytesToXXD numColumns groupSize initialOffset = loop initialOffset . chunksOfBL numColumns
