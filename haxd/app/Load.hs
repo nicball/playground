@@ -9,28 +9,28 @@ module Load
 
 import Cli ( LoadArgs(..) )
 import Control.Monad ( when )
-import Data.ByteString.Lazy ( ByteString )
 import Data.Char ( isSpace )
 import Data.Foldable ( traverse_ )
 import Data.Int ( Int64 )
-import qualified Data.ByteString as BSS
-import qualified Data.ByteString.Char8 as BSSC
-import qualified Data.ByteString.Lazy as BS
-import qualified Data.ByteString.Lazy.Char8 as BSC
-import qualified Data.ByteString.UTF8 as UTF8S
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BSC
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString.Lazy.Char8 as BLC
+import qualified Data.ByteString.Lazy.UTF8 as UTF8L
+import qualified Data.ByteString.Builder as BB
 import qualified System.IO as IO
-import Utils ( groupNS, integralFromByteString, integralToByteString, padLeft )
+import Utils ( chunksOfBS, integralFromByteString )
 
 load :: LoadArgs -> IO ()
 load args = output . map addOffset . parseXXD =<< input
   where
-    input = maybe BS.getContents BS.readFile . loadInputFile $ args
+    input = maybe BL.getContents BL.readFile . loadInputFile $ args
     addOffset (Line offset content) = Line (offset + additionalOffset) content
     additionalOffset = loadOffset args
     transform file
       = if loadPatchMode args
         then patchXXD file
-        else BS.hPut file . xxdToBytes
+        else BL.hPut file . xxdToBytes
     output = case loadOutputFile args of
       Just path -> IO.withBinaryFile path IO.WriteMode . flip transform
       Nothing -> transform IO.stdout
@@ -42,35 +42,35 @@ patchXXD file = traverse_ execLine
       IO.hSeek file IO.AbsoluteSeek (fromIntegral offset)
       currPos <- fromIntegral <$> IO.hTell file
       when (currPos < offset)
-        . BS.hPut file
-        . BS.replicate (offset - currPos)
+        . BL.hPut file
+        . BL.replicate (offset - currPos)
         $ 0
-      BS.hPut file content
+      BL.hPut file content
 
-xxdToBytes :: [Line] -> ByteString
-xxdToBytes = BS.concat . go 0
+xxdToBytes :: [Line] -> BL.ByteString
+xxdToBytes = BB.toLazyByteString . mconcat . go 0
   where
     go offset arg@(Line nextOffset content : rest)
       = if offset > nextOffset
-        then error (UTF8S.toString (padLeft '0' 8 (integralToByteString nextOffset)) <> ": overlapping not allowed")
+        then error (UTF8L.toString (BB.toLazyByteString (BB.int64HexFixed nextOffset)) <> ": overlapping not allowed")
         else if offset < nextOffset
-          then BS.replicate (nextOffset - offset) 0 : go nextOffset arg
-          else content : go (offset + BS.length content) rest
-    go _ [] = []
+          then mconcat (replicate (fromIntegral (nextOffset - offset)) (BB.int8 0)) : go nextOffset arg
+          else BB.lazyByteString content : go (offset + BL.length content) rest
+    go _ [] = mempty
 
-parseXXD :: ByteString -> [Line]
-parseXXD = map parseLine . filter (not . BSC.all isSpace) . BSC.lines
+parseXXD :: BL.ByteString -> [Line]
+parseXXD = map parseLine . filter (not . BLC.all isSpace) . BLC.lines
 
 data Line = Line
   { lineOffset :: Int64
-  , lineContent :: ByteString
+  , lineContent :: BL.ByteString
   }
 
 {-# INLINE parseLine #-}
-parseLine :: ByteString -> Line
+parseLine :: BL.ByteString -> Line
 parseLine line = Line offset content
   where
-    (offsetPart, rest) = BSSC.breakSubstring ": " . BS.toStrict $ line
-    offset = integralFromByteString  offsetPart
-    hexPart = fst . BSSC.breakSubstring "  " . BSS.drop 2 $ rest
-    content = BS.pack . map integralFromByteString . groupNS 2 . BSSC.filter (/= ' ') $ hexPart
+    (offsetPart, rest) = BSC.breakSubstring ": " . BL.toStrict $ line
+    offset = integralFromByteString offsetPart
+    hexPart = fst . BSC.breakSubstring "  " . BS.drop 2 $ rest
+    content = BL.pack . map integralFromByteString . chunksOfBS 2 . BSC.filter (/= ' ') $ hexPart

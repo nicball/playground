@@ -6,53 +6,56 @@ module Dump
   ) where
 
 import Cli ( DumpArgs(..) )
-import Data.ByteString.Lazy ( ByteString )
-import Data.Char ( chr )
 import Data.Int ( Int64 )
 import Data.Word ( Word8 )
-import qualified Data.ByteString as BSS
-import qualified Data.ByteString.Char8 as BSSC
-import qualified Data.ByteString.Lazy as BS
-import Utils ( padLeft, padRight, integralToByteString, groupN, groupNS )
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString.Builder as BB
+import Data.List ( intercalate )
+import Utils ( chunksOf, chunksOfBL )
+import System.IO ( stdout )
 
 dump :: DumpArgs -> IO ()
 dump args = output . bytesToXXD numColumns groupSize offset . trunc =<< input
   where
-   input      = maybe BS.getContents BS.readFile . dumpInputFile  $ args
-   output     = maybe BS.putStr BS.writeFile     . dumpOutputFile $ args
-   trunc      = maybe id BS.take                 . dumpLength     $ args
+   input      = maybe BL.getContents BL.readFile . dumpInputFile $ args
+   output     = maybe (BB.hPutBuilder stdout) BB.writeFile . dumpOutputFile $ args
+   trunc      = maybe id BL.take . dumpLength $ args
    numColumns = dumpNumColumns args
    groupSize  = min (dumpGroupSize args) numColumns
    offset     = dumpOffset args
 
-bytesToXXD :: Int64 -> Int64 -> Int64 -> ByteString -> ByteString
-bytesToXXD numColumns groupSize initialOffset = loop initialOffset . groupN numColumns
+bytesToXXD :: Int64 -> Int64 -> Int64 -> BL.ByteString -> BB.Builder
+bytesToXXD numColumns groupSize initialOffset = loop initialOffset . chunksOfBL numColumns
   where
-    {-# INLINE loop #-}
-    loop :: Int64 -> [BSS.ByteString] -> ByteString
-    loop offset (line : rest) = BS.fromStrict (displayLine offset line) <> loop (offset + fromIntegral (BSS.length line)) rest
+    loop :: Int64 -> [BS.ByteString] -> BB.Builder
+    loop offset (line : rest) = displayLine offset line <> loop (offset + fromIntegral (BS.length line)) rest
     loop _ [] = ""
 
+    {-# INLINE displayLine #-}
+    displayLine :: Int64 -> BS.ByteString -> BB.Builder
+    displayLine offset line
+      = BB.int32HexFixed (fromIntegral offset) <> BB.stringUtf8 ": " <> hex line <> padding <> "  " <> ascii line <> "\n"
+      where
+        hexWidth = numColumns * 2 + numGroups - 1
+        numGroups = - (numColumns `div` (- groupSize)) -- truncate to +inf
+        lineLen = fromIntegral . BS.length $ line
+        lineGroups = - (lineLen `div` (- groupSize))
+        lineWidth = lineLen * 2 + lineGroups - 1
+        padding = mconcat . replicate (fromIntegral (hexWidth - lineWidth)) . BB.char7 $ ' '
+
     {-# INLINE hex #-}
-    hex :: BSS.ByteString -> BSS.ByteString
-    hex = BSS.intercalate " " . map (BSS.concatMap (padLeft '0' 2 . integralToByteString)) . groupNS (fromIntegral groupSize)
+    hex :: BS.ByteString -> BB.Builder
+    hex = mconcat . intercalate [BB.char7 ' '] . chunksOf (fromIntegral groupSize) . map BB.word8HexFixed . BS.unpack
 
     {-# INLINE ascii #-}
-    ascii :: BSS.ByteString -> BSS.ByteString
-    ascii = BSS.concatMap displayByte
-
-    {-# INLINE displayLine #-}
-    displayLine :: Int64 -> BSS.ByteString -> BSS.ByteString
-    displayLine offset line
-      = padLeft '0' 8 (integralToByteString offset) <> ": " <> padRight ' ' hexWidth (hex line) <> "  " <> ascii line <> "\n"
-      where
-        hexWidth = fromIntegral (numColumns * 2 + numGroups - 1)
-        numGroups = - (numColumns `div` (- groupSize)) -- truncate to +inf
+    ascii :: BS.ByteString -> BB.Builder
+    ascii = foldMap displayByte . BS.unpack
 
     {-# INLINE displayByte #-}
-    displayByte :: Word8 -> BSS.ByteString
+    displayByte :: Word8 -> BB.Builder
     displayByte b
-      = if isXXDAscii b then BSSC.singleton (chr . fromIntegral $ b) else "."
+      = if isXXDAscii b then BB.word8 b else BB.char7 '.'
 
     {-# INLINE isXXDAscii #-}
     isXXDAscii :: Word8 -> Bool
