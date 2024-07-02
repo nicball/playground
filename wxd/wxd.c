@@ -115,7 +115,8 @@ int write_exactly(const int fd, char* buf, const int size) {
 }
 
 int get_hex_width(const int num_columns, const int group_size) {
-  const int num_groups = -(num_columns / -group_size);
+  int num_groups = num_columns / group_size;
+  if (num_columns % group_size) ++num_groups;
   return num_columns * 2 + num_groups - 1;
 }
 
