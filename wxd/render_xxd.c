@@ -4,8 +4,7 @@ static inline void hex(int value, uniform const int width, int8* const out) {
     0x61, 0x62, 0x63, 0x64, 0x65, 0x66
   };
   for (int i = 0; i < width; ++i) {
-    int8 d = value & 0xF;
-    value = value >> 4;
+    int8 d = (value >> (4 * i)) & 0xF;
     int8 c = d < 10;
     out[width - 1 - i] = c * (d + 0x30) + ((int8) !c) * (d - 10 + 0x61);
   }
