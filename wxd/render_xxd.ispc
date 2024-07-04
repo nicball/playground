@@ -1,13 +1,32 @@
-static inline void hex(int value, uniform const int width, int8* const out) {
-  static uniform const int8 to_s[0x10] = {
-    0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39,
-    0x61, 0x62, 0x63, 0x64, 0x65, 0x66
-  };
-  for (int i = 0; i < width; ++i) {
-    int8 d = (value >> (4 * i)) & 0xF;
-    int8 c = d < 10;
-    out[width - 1 - i] = c * (d + 0x30) + ((int8) !c) * (d - 10 + 0x61);
-  }
+// static uniform const int8 to_s[0x10] = {
+//   0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39,
+//   0x61, 0x62, 0x63, 0x64, 0x65, 0x66
+// };
+
+static inline int8 nibble(const int8 lf) {
+  const bool c = lf < 10;
+  return select(c, lf + 0x30, lf - 10 + 0x61);
+}
+
+static inline uniform int8 nibble(uniform const int8 lf) {
+  uniform const bool c = lf < 10;
+  return select(c, lf + 0x30, lf - 10 + 0x61);
+}
+
+static inline void hex(uniform const uint32 value, int8* const uniform strbuf) {
+  strbuf[0] = nibble(value >> 28);
+  strbuf[1] = nibble((value >> 24) & 0xF);
+  strbuf[2] = nibble((value >> 20) & 0xF);
+  strbuf[3] = nibble((value >> 16) & 0xF);
+  strbuf[4] = nibble((value >> 12) & 0xF);
+  strbuf[5] = nibble((value >> 8) & 0xF);
+  strbuf[6] = nibble((value >> 4) & 0xF);
+  strbuf[7] = nibble(value & 0xF);
+}
+
+static inline void hex(const uint8 value, int8* const strbuf) {
+  strbuf[0] = nibble(value >> 4);
+  strbuf[1] = nibble(value & 0xF);
 }
 
 static inline uniform int get_hex_width(uniform const int num_columns, uniform const int group_size) {
@@ -38,7 +57,7 @@ export uniform int render_xxd(
     uniform const int outbase = inbase / num_columns * line_width;
     uniform const int to_end = inbuf_len - inbase;
     uniform const int r = to_end > num_columns ? num_columns : to_end;
-    hex(offset + inbase, 8, &outbuf[outbase]);
+    hex((uniform uint32) (offset + inbase), &outbuf[outbase]);
     outbuf[outbase + 8] = 0x3a;
     uniform const int hex_start = outbase + 9;
     uniform const int num_full_groups = r / group_size;
@@ -47,8 +66,8 @@ export uniform int render_xxd(
     foreach (gid = 0 ... num_groups) {
       const int gbase = hex_start + gid * (group_size * 2 + 1);
       outbuf[gbase] = 0x20;
-      for (int cing = 0; cing < group_size; ++cing) {
-        hex((unsigned int8) inbuf[inbase + gid * group_size + cing], 2, &outbuf[gbase + 1 + cing * 2]);
+      for (uniform int cing = 0; cing < group_size; ++cing) {
+        hex((uint8) inbuf[inbase + gid * group_size + cing], &outbuf[gbase + 1 + cing * 2]);
       }
     }
     uniform const int hex_end = hex_start + num_groups * (group_size * 2 + 1);

@@ -125,8 +125,7 @@ int get_line_width(const int num_columns, const int group_size) {
 }
 
 int render_xxd(const char* const restrict inbuf, const int inbuf_len, const int num_columns, const int group_size, size_t offset, char* restrict outbuf) {
-  int cursor;
-  const int hex_width = get_hex_width(num_columns, group_size);
+  int cursor = 0;
   const int line_width = get_line_width(num_columns, group_size);
   for (int inbase = 0; inbase < inbuf_len; inbase += num_columns) {
     const int outbase = inbase / num_columns * line_width;
