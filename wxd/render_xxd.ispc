@@ -76,7 +76,8 @@ export uniform int render_xxd(
       outbuf[i] = 0x20;
     }
     foreach (i = 0 ... r) {
-      outbuf[ascii_start + i] = 0x20 <= inbuf[inbase + i] && inbuf[inbase + i] <= 0x7e ? inbuf[inbase + i] : 0x2e;
+      int8 b = inbuf[inbase + i];
+      outbuf[ascii_start + i] = select(and(0x20 <= b, b <= 0x7e), b, (varying int8) 0x2e);
     }
     uniform const int ascii_end = ascii_start + r;
     foreach (i = ascii_end ... outbase + line_width - 1) {
