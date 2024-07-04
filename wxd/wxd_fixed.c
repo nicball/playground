@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <stdint.h>
 #include "render_fixed.h"
 
 int min(int a, int b) { return a < b ? a : b; }
@@ -69,8 +70,8 @@ void parse_cli(const int len, const char** args, cli_args_t* result) {
   parse_dump(len - 1, args + 1, &result->dump_args);
 }
 
-void hex(unsigned long long value, const int width, char* const out) {
-  static const char to_s[0xF + 1] = "0123456789abcdef";
+void hex(unsigned long long value, const int width, uint8_t* const out) {
+  static const uint8_t to_s[0xF + 1] = "0123456789abcdef";
   for (int i = width - 1; i >= 0; --i) {
     int d = value & 0xF;
     value = value >> 4;
@@ -78,7 +79,7 @@ void hex(unsigned long long value, const int width, char* const out) {
   }
 }
 
-int read_exactly(const int fd, char* buf, const int size) {
+int read_exactly(const int fd, uint8_t* buf, const int size) {
   int count = 0;
   while (count != size) {
     ssize_t r = read(fd, buf, size - count);
@@ -90,7 +91,7 @@ int read_exactly(const int fd, char* buf, const int size) {
   return count;
 }
 
-int write_exactly(const int fd, char* buf, const int size) {
+int write_exactly(const int fd, uint8_t* buf, const int size) {
   int count = 0;
   while (count != size) {
     ssize_t r = write(fd, buf, size - count);
@@ -111,7 +112,7 @@ int get_line_width(const int num_columns, const int group_size) {
   return 10 + get_hex_width(num_columns, group_size) + 2 + num_columns + 1;
 }
 
-int render_xxd(const char* const restrict inbuf, const int inbuf_len, const int num_columns, const int group_size, size_t offset, char* restrict outbuf) {
+int render_xxd(const uint8_t* const restrict inbuf, const int inbuf_len, const int num_columns, const int group_size, size_t offset, uint8_t* restrict outbuf) {
   int cursor = 0;
   const int line_width = get_line_width(num_columns, group_size);
   for (int inbase = 0; inbase < inbuf_len; inbase += num_columns) {
@@ -159,8 +160,8 @@ void dump(const dump_args_t* args) {
   const int num_lines = 16 * 1024 / args->num_columns;
   const int inbuf_size = args->num_columns * num_lines;
   const int outbuf_size = line_width * num_lines;
-  char* const inbuf = (char*) malloc(inbuf_size);
-  char* const outbuf = (char*) malloc(outbuf_size);
+  uint8_t* const inbuf = (uint8_t*) malloc(inbuf_size);
+  uint8_t* const outbuf = (uint8_t*) malloc(outbuf_size);
   if (!outbuf || !inbuf) {
     perror("allocation error");
     exit(EXIT_FAILURE);
