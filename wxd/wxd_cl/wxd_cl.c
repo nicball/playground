@@ -103,8 +103,8 @@ void destroy_renderer() {
   if (g_ocl_context) clReleaseContext(g_ocl_context);
 }
 
-extern int _binary_render_kernel_spv_start;
-extern int _binary_render_kernel_spv_size;
+extern const char _binary_render_kernel_spv_start;
+extern char _binary_render_kernel_spv_size[];
 
 void initialize_renderer() {
   atexit(destroy_renderer);
@@ -117,9 +117,10 @@ void initialize_renderer() {
   check_cl_error("cl get root device", clGetContextInfo(g_ocl_context, CL_CONTEXT_DEVICES, sizeof(device), &device, 0));
   g_ocl_queue = clCreateCommandQueueWithProperties(g_ocl_context, device, 0, &ok);
   check_cl_error("cl command queue", ok);
-  g_ocl_program = clCreateProgramWithIL(g_ocl_context, &_binary_render_kernel_spv_start, (size_t)&_binary_render_kernel_spv_size, &ok);
+  // g_ocl_program = clCreateProgramWithIL(g_ocl_context, &_binary_render_kernel_spv_start, (size_t)&_binary_render_kernel_spv_size, &ok);
+  g_ocl_program = clCreateProgramWithSource(g_ocl_context, 1, (char*[]){ &_binary_render_kernel_spv_start }, (size_t[]){ (size_t)_binary_render_kernel_spv_size }, &ok);
   check_cl_error("cl program", ok);
-  ok = clBuildProgram(g_ocl_program, 0, 0, 0, 0, 0);
+  ok = clBuildProgram(g_ocl_program, 1, &device, 0, 0, 0);
   if (ok == CL_BUILD_PROGRAM_FAILURE){
     static char buf[4096];
     size_t log_size;
@@ -127,7 +128,7 @@ void initialize_renderer() {
     fprintf(stderr, "build log:\n%.*s\n", (int)log_size, buf);
   }
   check_cl_error("cl build program", ok);
-  {
+  if (0) {
     static char names[1024];
     check_cl_error("cl get kernel names", clGetProgramInfo(g_ocl_program, CL_PROGRAM_KERNEL_NAMES, sizeof(names), names, 0));
     fprintf(stderr, "available kernels: %s\n", names);
