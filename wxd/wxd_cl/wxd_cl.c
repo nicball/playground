@@ -1,3 +1,5 @@
+#define CL_TARGET_OPENCL_VERSION 200
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -111,14 +113,14 @@ void initialize_renderer() {
   cl_int ok;
   cl_platform_id platform;
   check_cl_error("cl platform", clGetPlatformIDs(1, &platform, 0));
-  g_ocl_context = clCreateContextFromType((cl_context_properties[]){ CL_CONTEXT_PLATFORM, platform, 0 }, CL_DEVICE_TYPE_GPU, 0, 0, &ok);
+  g_ocl_context = clCreateContextFromType((cl_context_properties[]){ CL_CONTEXT_PLATFORM, (cl_context_properties)platform, 0 }, CL_DEVICE_TYPE_GPU, 0, 0, &ok);
   check_cl_error("cl context", ok);
   cl_device_id device;
   check_cl_error("cl get root device", clGetContextInfo(g_ocl_context, CL_CONTEXT_DEVICES, sizeof(device), &device, 0));
   g_ocl_queue = clCreateCommandQueueWithProperties(g_ocl_context, device, 0, &ok);
   check_cl_error("cl command queue", ok);
   // g_ocl_program = clCreateProgramWithIL(g_ocl_context, &_binary_render_kernel_spv_start, (size_t)&_binary_render_kernel_spv_size, &ok);
-  g_ocl_program = clCreateProgramWithSource(g_ocl_context, 1, (char*[]){ &_binary_render_kernel_spv_start }, (size_t[]){ (size_t)_binary_render_kernel_spv_size }, &ok);
+  g_ocl_program = clCreateProgramWithSource(g_ocl_context, 1, (const char*[]){ &_binary_render_kernel_spv_start }, (size_t[]){ (size_t)_binary_render_kernel_spv_size }, &ok);
   check_cl_error("cl program", ok);
   ok = clBuildProgram(g_ocl_program, 1, &device, 0, 0, 0);
   if (ok == CL_BUILD_PROGRAM_FAILURE){
@@ -135,6 +137,11 @@ void initialize_renderer() {
   }
   g_ocl_kernel = clCreateKernel(g_ocl_program, "render_xxd", &ok);
   check_cl_error("cl kernel", ok);
+  size_t kernel_property;
+  check_cl_error("cl kernel properties", clGetKernelWorkGroupInfo(g_ocl_kernel, device, CL_KERNEL_WORK_GROUP_SIZE, sizeof(kernel_property), &kernel_property, 0));
+  fprintf(stderr, "kernel work group size: %lu\n", kernel_property);
+  check_cl_error("cl kernel properties", clGetKernelWorkGroupInfo(g_ocl_kernel, device, CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE, sizeof(kernel_property), &kernel_property, 0));
+  fprintf(stderr, "kernel perferred work group size multiple: %lu\n", kernel_property);
 }
 
 int read_exactly(const int fd, char* buf, const int size) {
@@ -187,6 +194,7 @@ int render_xxd(const char* const inbuf, const int inbuf_len, const int num_colum
   check_cl_error("set kernel args", clSetKernelArg(g_ocl_kernel, 4, sizeof(offset), &offset));
   check_cl_error("set kernel args", clSetKernelArgSVMPointer(g_ocl_kernel, 5, outbuf));
   cl_event event;
+  fprintf(stderr, "dispatching %d runs of kernel\n", num_lines);
   check_cl_error("execute kernel", clEnqueueNDRangeKernel(g_ocl_queue, g_ocl_kernel, 1, 0, (size_t[]){ num_lines }, 0, 0, 0, &event));
   check_cl_error("kernel completion", clWaitForEvents(1, &event));
   return num_full_lines * line_width +
@@ -195,7 +203,7 @@ int render_xxd(const char* const inbuf, const int inbuf_len, const int num_colum
 
 void dump(const dump_args_t* args) {
   const int line_width = get_line_width(args->num_columns, args->group_size);
-  const int num_lines = 16 * 1024 * 1024 / args->num_columns;
+  const int num_lines = 1024;
   const int inbuf_size = args->num_columns * num_lines;
   const int outbuf_size = line_width * num_lines;
   char* const inbuf = (char*) clSVMAlloc(g_ocl_context, CL_MEM_READ_WRITE | CL_MEM_SVM_FINE_GRAIN_BUFFER, inbuf_size, 0);

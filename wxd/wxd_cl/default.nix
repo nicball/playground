@@ -10,6 +10,6 @@ stdenv.mkDerivation {
     # llvm-spirv render_kernel.bc -o render_kernel.spv
     mv render_kernel.cl render_kernel.spv
     objcopy -I binary -O elf64-x86-64 render_kernel.spv render_kernel.o
-    gcc render_kernel.o wxd_cl.c -o $out -lOpenCL -g
+    gcc -O3 render_kernel.o wxd_cl.c -o $out -lOpenCL -g
   '';
 }
