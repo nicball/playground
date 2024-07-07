@@ -7,7 +7,7 @@ target/wxd_fixed: wxd_ispc/wxd_fixed.c wxd_ispc/render_fixed.ispc
 
 target/wxd_ispc: wxd_ispc/wxd_ispc.c wxd_ispc/render_xxd.ispc
 	ispc -O3 wxd_ispc/render_xxd.ispc --target avx2-i32x8 -o target/render_xxd.o -h target/render_xxd.h -g
-	gcc wxd_ispc.c target/render_xxd.o -o target/wxd_ispc -O3 -g -Wall -pedantic -Itarget
+	gcc wxd_ispc/wxd_ispc.c target/render_xxd.o -o target/wxd_ispc -O3 -g -Wall -pedantic -Itarget
 
 target/wxd_mmap: bad/wxd_mmap.c
 	gcc bad/wxd_mmap.c -o target/wxd_mmap -O3 -g -Wall -pedantic
