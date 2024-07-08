@@ -158,8 +158,8 @@ void dump(const dump_args_t* args) {
   const int outbuf_size = line_width * num_lines;
   uint8_t* const inbuf = (uint8_t*) malloc(inbuf_size);
   uint8_t* const outbuf = (uint8_t*) malloc(outbuf_size);
-  int n2o[args->num_columns * 2 + 2];
-  int o2n[(args->num_columns * 2 + 1) * 3 + 64];
+  int n2o[args->num_columns * 3];
+  int o2n[(args->num_columns * 6) * 3 + 64];
   int cursor = -1;
   for (int i = 0; i < sizeof(n2o) / sizeof(n2o[0]) / 2; ++i) {
     if (i % args->group_size == 0) ++cursor;
@@ -171,9 +171,9 @@ void dump(const dump_args_t* args) {
     o2n[n2o[i]] = i;
   }
   printf("n2o:");
-  for (int i = 0; i < sizeof(n2o)/sizeof(n2o[0]); ++i) printf(" %d", n2o[i]);
+  for (int i = 0; i < sizeof(n2o) / sizeof(n2o[0]); ++i) printf(" %d", n2o[i]);
   printf("\no2n:");
-  for (int i = 0; i < sizeof(o2n)/sizeof(o2n[0]); ++i) printf(" %d", o2n[i]);
+  for (int i = 0; i < sizeof(o2n) / sizeof(o2n[0]); ++i) printf(" %d", o2n[i]);
   printf("\n");
   if (!outbuf || !inbuf) {
     perror("allocation error");
