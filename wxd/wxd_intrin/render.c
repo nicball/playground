@@ -3,7 +3,17 @@
 
 void render_ascii(const uint8_t* const inbuf, const int inbuf_len, uint8_t* const outbuf) {
   int i;
-  for (i = 0; i + 16 <= inbuf_len; i += 16) {
+  for (i = 0; i + 32 <= inbuf_len; i += 32) {
+    __m256i byte = _mm256_loadu_si256((__m256i*)&inbuf[i]);
+    __m256i ascii = _mm256_blendv_epi8(
+      _mm256_set1_epi8('.'),
+      byte,
+      _mm256_and_si256(
+        _mm256_cmpgt_epi8(byte, _mm256_set1_epi8(' ' - 1)),
+        _mm256_cmpgt_epi8(_mm256_set1_epi8('~' + 1), byte)));
+    _mm256_storeu_si256((__m256i*)&outbuf[i], ascii);
+  }
+  for (; i + 16 <= inbuf_len; i += 16) {
     __m128i byte = _mm_loadu_si128((__m128i*)&inbuf[i]);
     __m128i ascii = _mm_blendv_epi8(
       _mm_set1_epi8('.'),
@@ -17,14 +27,6 @@ void render_ascii(const uint8_t* const inbuf, const int inbuf_len, uint8_t* cons
     outbuf[i] = (' ' <= inbuf[i] && inbuf[i] <= '~') ? inbuf[i] : '.';
 }
 
-static inline __m128i i16x8_to_i8x8(__m128i a) {
-  return _mm_shuffle_epi8(
-    a,
-    _mm_set_epi8(
-      -1, -1, -1, -1, -1, -1, -1, -1,
-      0x0E, 0x0C, 0x0A, 0x08, 0x06, 0x04, 0x02, 0x00));
-}
-
 void render_hex(
   const uint8_t* const inbuf,
   const int8_t inbuf_len,
@@ -34,21 +36,14 @@ void render_hex(
 ) {
   int8_t base;
   int8_t out_off = 0;
+  const __m128i to_s = _mm_set_epi8(
+    'f', 'e', 'd', 'c', 'b', 'a', '9', '8', '7', '6', '5', '4', '3', '2', '1', '0');
   for (base = 0; base + 8 <= inbuf_len; base += 8) {
     __m128i byte = _mm_cvtepu8_epi16(_mm_loadu_si64((__m128i*)&inbuf[base]));
     __m128i byte_hi = _mm_srli_epi16(byte, 4);
-    __m128i byte_lo = _mm_and_si128(byte, _mm_set1_epi16(0xF));
-    __m128i nib_hi = 
-      _mm_blendv_epi8(
-        _mm_add_epi16(byte_hi, _mm_set1_epi16('0')),
-        _mm_add_epi16(byte_hi, _mm_set1_epi16('a' - 10)),
-        _mm_cmpgt_epi16(byte_hi, _mm_set1_epi16(9)));
-    __m128i nib_lo = 
-      _mm_blendv_epi8(
-        _mm_add_epi16(byte_lo, _mm_set1_epi16('0')),
-        _mm_add_epi16(byte_lo, _mm_set1_epi16('a' - 10)),
-        _mm_cmpgt_epi16(byte_lo, _mm_set1_epi16(9)));
-    __m128i nib = _mm_unpacklo_epi8(i16x8_to_i8x8(nib_hi), i16x8_to_i8x8(nib_lo));
+    __m128i byte_lo = _mm_and_si128(_mm_slli_epi16(byte, 8), _mm_set1_epi8(0xF));
+    __m128i nib_value = _mm_or_si128(byte_hi, byte_lo);
+    __m128i nib = _mm_shuffle_epi8(to_s, nib_value);
     int8_t out_end = n2o[(base + 7) * 2] + 2;
     __m128i out_full_idx = _mm_loadu_si128((__m128i*)&o2n[out_off]);
     __m128i out_full = _mm_blendv_epi8(
