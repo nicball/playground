@@ -18,7 +18,7 @@ export void render_hex(const uint8* const uniform inbuf, uniform const int inbuf
     int nib_base = select((programIndex & 1) == 1, programCount, (varying int) 0);
     int8 nib_0 = shuffle(nib_hi, nib_lo, (programIndex >> 1) + nib_base);
     int8 nib_1 = shuffle(nib_hi, nib_lo, ((programCount + programIndex) >> 1) + nib_base);
-    uniform int out_end = n2o[(base + len - 1) * 2] + 2;
+    uniform int out_end = n2o[(base + len - 1) * 2 + 1] + 1;
     int out_0_idx = o2n[out_off +                    programIndex];
     int out_1_idx = o2n[out_off +     programCount + programIndex];
     int out_2_idx = o2n[out_off + 2 * programCount + programIndex];

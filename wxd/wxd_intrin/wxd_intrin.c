@@ -126,7 +126,7 @@ int get_line_width(const int num_columns, const int group_size) {
   return 10 + get_hex_width(num_columns, group_size) + 2 + num_columns + 1;
 }
 
-int render_xxd(const uint8_t* const inbuf, const int inbuf_len, const int num_columns, const int group_size, size_t offset, const int8_t* n2o, const int8_t* o2n, uint8_t* outbuf) {
+int render_xxd(const uint8_t* const inbuf, const int inbuf_len, const int num_columns, const int group_size, size_t offset, const int8_t* next_rel, const int8_t* o2n_rel, uint8_t* outbuf) {
   int cursor = 0;
   const int line_width = get_line_width(num_columns, group_size);
   for (int inbase = 0; inbase < inbuf_len; inbase += num_columns) {
@@ -136,10 +136,7 @@ int render_xxd(const uint8_t* const inbuf, const int inbuf_len, const int num_co
     outbuf[outbase + 8] = ':';
     outbuf[outbase + 9] = ' ';
     cursor = outbase + 10;
-    render_hex(&inbuf[inbase], r, n2o, o2n, &outbuf[cursor]);
-    cursor = cursor + n2o[(r - 1) * 2] + 2;
-    outbuf[cursor++] = ' ';
-    outbuf[cursor++] = ' ';
+    cursor += render_hex(&inbuf[inbase], r, next_rel, o2n_rel, &outbuf[cursor]);
     while (cursor < outbase + line_width - num_columns - 1) {
       outbuf[cursor++] = ' ';
     }
@@ -158,9 +155,9 @@ void dump(const dump_args_t* args) {
   const int outbuf_size = line_width * num_lines;
   uint8_t* const inbuf = (uint8_t*) malloc(inbuf_size);
   uint8_t* const outbuf = (uint8_t*) malloc(outbuf_size);
-  int8_t n2o[args->num_columns * 2 + 2];
-  int8_t o2n[sizeof(n2o) * 2 + 16];
-  int8_t cursor = -1;
+  int32_t n2o[args->num_columns * 3];
+  int32_t o2n[sizeof(n2o) / sizeof(n2o[0]) * 2];
+  int32_t cursor = -1;
   for (int i = 0; i < sizeof(n2o) / sizeof(n2o[0]) / 2; ++i) {
     if (i % args->group_size == 0) ++cursor;
     n2o[2 * i] = cursor++;
@@ -170,11 +167,28 @@ void dump(const dump_args_t* args) {
   for (int i = 0; i < sizeof(n2o) / sizeof(n2o[0]); ++i) {
     o2n[n2o[i]] = i;
   }
-  printf("n2o:");
-  for (int i = 0; i < sizeof(n2o) / sizeof(n2o[0]); ++i) printf(" %d", n2o[i]);
-  printf("\no2n:");
-  for (int i = 0; i < sizeof(o2n) / sizeof(o2n[0]); ++i) printf(" %d", o2n[i]);
-  printf("\n");
+  int8_t next_rel[args->num_columns / 8 + 1];
+  int8_t o2n_rel[sizeof(o2n) / sizeof(o2n[0])];
+  memset(o2n_rel, 0, sizeof(o2n_rel));
+  int last_out = 0;
+  for (int i = 0; i < sizeof(next_rel); ++i) {
+    next_rel[i] = n2o[((i + 1) * 8 - 1) * 2 + 1] + 1 - last_out;
+    last_out += next_rel[i];
+  }
+  for (int i = 0, out_off = 0; i < sizeof(next_rel); out_off += next_rel[i], ++i)  {
+    for (int j = 0; j < next_rel[i]; ++j) {
+      o2n_rel[out_off + j] = (o2n[out_off + j] == -1) ? -1 : (o2n[out_off + j] - i * 8 * 2);
+    }
+  }
+  // printf("n2o:\t\t");
+  // for (int i = 0; i < sizeof(n2o) / sizeof(n2o[0]); ++i) printf(" %3d", n2o[i]);
+  // printf("\no2n:\t\t");
+  // for (int i = 0; i < sizeof(o2n) / sizeof(o2n[0]); ++i) printf(" %3d", o2n[i]);
+  // printf("\nnext_rel:\t");
+  // for (int i = 0; i < sizeof(next_rel); ++i) printf(" %3d", next_rel[i]);
+  // printf("\no2n_rel:\t");
+  // for (int i = 0; i < sizeof(o2n_rel); ++i) printf(" %3d", o2n_rel[i]);
+  // printf("\n");
   if (!outbuf || !inbuf) {
     perror("allocation error");
     exit(EXIT_FAILURE);
@@ -187,7 +201,7 @@ void dump(const dump_args_t* args) {
       perror("input error");
       exit(EXIT_FAILURE);
     }
-    int written = render_xxd(inbuf, inbuf_read, args->num_columns, args->group_size, offset, n2o, o2n, outbuf);
+    int written = render_xxd(inbuf, inbuf_read, args->num_columns, args->group_size, offset, next_rel, o2n_rel, outbuf);
     offset += inbuf_read;
     if (write_exactly(args->output_fd, outbuf, written) != written) {
       perror("output error");
