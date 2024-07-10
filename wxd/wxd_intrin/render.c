@@ -1,7 +1,7 @@
 #include <immintrin.h>
 #include "render.h"
 
-void render_ascii(const uint8_t* const inbuf, const int inbuf_len, uint8_t* const outbuf) {
+void render_ascii(const uint8_t* const inbuf, const int32_t inbuf_len, uint8_t* const outbuf) {
   int i;
   for (i = 0; i + 32 <= inbuf_len; i += 32) {
     __m256i byte = _mm256_loadu_si256((__m256i*)&inbuf[i]);
@@ -29,7 +29,7 @@ void render_ascii(const uint8_t* const inbuf, const int inbuf_len, uint8_t* cons
 
 int32_t render_hex(
   const uint8_t* const inbuf,
-  const int8_t inbuf_len,
+  const int32_t inbuf_len,
   const int8_t* const next_rel,
   const int8_t* const o2n_rel,
   uint8_t* const outbuf
@@ -57,7 +57,7 @@ int32_t render_hex(
       _mm_set1_epi8(' '),
       _mm_cmpeq_epi8(out_rest_idx, _mm_set1_epi8(-1)));
     uint64_t rest = _mm_cvtsi128_si64(out_rest);
-    for (int8_t i = out_off + 16; i < out_end; ++i)
+    for (int32_t i = out_off + 16; i < out_end; ++i)
       outbuf[i] = rest >> ((i - (out_off + 16)) * 8);
     out_off = out_end;
   }

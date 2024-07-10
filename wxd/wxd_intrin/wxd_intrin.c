@@ -150,49 +150,52 @@ int render_xxd(const uint8_t* const inbuf, const int inbuf_len, const int num_co
 
 void dump(const dump_args_t* args) {
   const int line_width = get_line_width(args->num_columns, args->group_size);
-  const int num_lines = 16 * 1024 / args->num_columns;
+  const int num_lines = 1024;
   const int inbuf_size = args->num_columns * num_lines;
   const int outbuf_size = line_width * num_lines;
   uint8_t* const inbuf = (uint8_t*) malloc(inbuf_size);
   uint8_t* const outbuf = (uint8_t*) malloc(outbuf_size);
-  int32_t n2o[args->num_columns * 3];
-  int32_t o2n[sizeof(n2o) / sizeof(n2o[0]) * 2];
-  int32_t cursor = -1;
-  for (int i = 0; i < sizeof(n2o) / sizeof(n2o[0]) / 2; ++i) {
+  const int n2o_size = args->num_columns * 3;
+  const int o2n_size = n2o_size * 2;
+  const int next_rel_size = args->num_columns / 8 + 1;
+  int* const n2o = (int*) malloc(n2o_size * sizeof(int));
+  int* const o2n = (int*) malloc(o2n_size * sizeof(int));
+  int8_t* const next_rel = (int8_t*) malloc(next_rel_size);
+  int8_t* const o2n_rel = (int8_t*) malloc(o2n_size);;
+  if (!inbuf || !outbuf || !n2o || !o2n || !next_rel || !o2n_rel) {
+    perror("allocation error");
+    exit(EXIT_FAILURE);
+  }
+  int cursor = -1;
+  for (int i = 0; i < n2o_size / 2; ++i) {
     if (i % args->group_size == 0) ++cursor;
     n2o[2 * i] = cursor++;
     n2o[2 * i + 1] = cursor++;
   }
-  memset(o2n, -1, sizeof(o2n));
-  for (int i = 0; i < sizeof(n2o) / sizeof(n2o[0]); ++i) {
+  memset(o2n, -1, o2n_size * sizeof(int));
+  for (int i = 0; i < n2o_size; ++i) {
     o2n[n2o[i]] = i;
   }
-  int8_t next_rel[args->num_columns / 8 + 1];
-  int8_t o2n_rel[sizeof(o2n) / sizeof(o2n[0])];
-  memset(o2n_rel, 0, sizeof(o2n_rel));
+  memset(o2n_rel, 0, o2n_size);
   int last_out = 0;
-  for (int i = 0; i < sizeof(next_rel); ++i) {
+  for (int i = 0; i < next_rel_size; ++i) {
     next_rel[i] = n2o[((i + 1) * 8 - 1) * 2 + 1] + 1 - last_out;
     last_out += next_rel[i];
   }
-  for (int i = 0, out_off = 0; i < sizeof(next_rel); out_off += next_rel[i], ++i)  {
+  for (int i = 0, out_off = 0; i < next_rel_size; out_off += next_rel[i], ++i)  {
     for (int j = 0; j < next_rel[i]; ++j) {
       o2n_rel[out_off + j] = (o2n[out_off + j] == -1) ? -1 : (o2n[out_off + j] - i * 8 * 2);
     }
   }
   // printf("n2o:\t\t");
-  // for (int i = 0; i < sizeof(n2o) / sizeof(n2o[0]); ++i) printf(" %3d", n2o[i]);
+  // for (int i = 0; i < n2o_size; ++i) printf(" %3d", n2o[i]);
   // printf("\no2n:\t\t");
-  // for (int i = 0; i < sizeof(o2n) / sizeof(o2n[0]); ++i) printf(" %3d", o2n[i]);
+  // for (int i = 0; i < o2n_size; ++i) printf(" %3d", o2n[i]);
   // printf("\nnext_rel:\t");
-  // for (int i = 0; i < sizeof(next_rel); ++i) printf(" %3d", next_rel[i]);
+  // for (int i = 0; i < next_rel_size; ++i) printf(" %3d", next_rel[i]);
   // printf("\no2n_rel:\t");
-  // for (int i = 0; i < sizeof(o2n_rel); ++i) printf(" %3d", o2n_rel[i]);
+  // for (int i = 0; i < o2n_size; ++i) printf(" %3d", o2n_rel[i]);
   // printf("\n");
-  if (!outbuf || !inbuf) {
-    perror("allocation error");
-    exit(EXIT_FAILURE);
-  }
   size_t offset = 0;
   int inbuf_read;
   do {
