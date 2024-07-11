@@ -13,5 +13,5 @@ target/wxd_mmap: bad/wxd_mmap.c
 	gcc bad/wxd_mmap.c -o target/wxd_mmap -O3 -g -Wall -pedantic
 
 target/wxd_intrin: wxd_intrin/wxd_intrin.c wxd_intrin/render.c wxd_intrin/render.h
-	gcc -O2 -march=znver3 wxd_intrin/wxd_intrin.c wxd_intrin/render.c -Iwxd_intrin -o target/wxd_intrin -g -Wall -pedantic
+	clang -O2 -march=znver3 wxd_intrin/wxd_intrin.c wxd_intrin/render.c -Iwxd_intrin -o target/wxd_intrin -g -Wall -pedantic
 

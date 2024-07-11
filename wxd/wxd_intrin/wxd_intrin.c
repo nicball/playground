@@ -84,15 +84,6 @@ void parse_cli(const int len, const char** args, cli_args_t* result) {
   parse_dump(len - 1, args + 1, &result->dump_args);
 }
 
-void hex(unsigned long long value, const int width, uint8_t* const out) {
-  static const uint8_t to_s[] = "0123456789abcdef";
-  for (int i = width - 1; i >= 0; --i) {
-    int d = value & 0xF;
-    value = value >> 4;
-    out[i] = to_s[d];
-  }
-}
-
 int read_exactly(const int fd, uint8_t* buf, const int size) {
   int count = 0;
   while (count != size) {
@@ -132,7 +123,7 @@ int render_xxd(const uint8_t* const inbuf, const int inbuf_len, const int num_co
   for (int inbase = 0; inbase < inbuf_len; inbase += num_columns) {
     const int outbase = inbase / num_columns * line_width;
     const int r = min(num_columns, inbuf_len - inbase);
-    hex(offset, 8, &outbuf[outbase]);
+    render_line_no(&offset, &outbuf[outbase]);
     outbuf[outbase + 8] = ':';
     outbuf[outbase + 9] = ' ';
     cursor = outbase + 10;

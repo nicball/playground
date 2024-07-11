@@ -1,6 +1,17 @@
 #include <immintrin.h>
 #include "render.h"
 
+void render_line_no(const uint64_t* line_no, uint8_t* const outbuf) {
+  const __m128i to_s = _mm_set_epi8(
+    'f', 'e', 'd', 'c', 'b', 'a', '9', '8', '7', '6', '5', '4', '3', '2', '1', '0');
+  const __m128i byte = _mm_cvtepu8_epi16(_mm_cvtsi64_si128(_loadbe_i32(line_no)));
+  const __m128i byte_hi = _mm_srli_epi16(byte, 4);
+  const __m128i byte_lo = _mm_and_si128(_mm_slli_epi16(byte, 8), _mm_set1_epi8(0xF));
+  const __m128i nib_value = _mm_or_si128(byte_hi, byte_lo);
+  const __m128i nib = _mm_shuffle_epi8(to_s, nib_value);
+  _mm_storeu_si64(outbuf, nib);
+}
+
 void render_ascii(const uint8_t* const inbuf, const int32_t inbuf_len, uint8_t* const outbuf) {
   int i;
   for (i = 0; i + 32 <= inbuf_len; i += 32) {
