@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <assert.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include "render.h"
@@ -15,8 +16,8 @@ typedef enum {
 typedef struct {
   int num_columns;
   int group_size;
-  int input_fd;
-  int output_fd;
+  FILE* input_file;
+  FILE* output_file;
 } dump_args_t;
 
 typedef struct {
@@ -31,8 +32,8 @@ void parse_dump(const int len, const char** args, dump_args_t* result) {
   int got_positionals = 0;
   result->group_size = 2;
   result->num_columns = 16;
-  result->input_fd = 0;
-  result->output_fd = 1;
+  result->input_file = stdin;
+  result->output_file = stdout;
   for (int i = 0; i < len; ++i) {
     if (!strcmp(args[i], "-g") || !strcmp(args[i], "--group_size")) {
       ++i;
@@ -57,20 +58,20 @@ void parse_dump(const int len, const char** args, dump_args_t* result) {
     }
   }
   if (positionals[0]) {
-    int fd = open(positionals[0], O_RDONLY);
-    if (fd == -1) {
+    FILE* file = fopen(positionals[0], "r");
+    if (!file) {
       perror("cannot open input");
       exit(EXIT_FAILURE);
     }
-    result->input_fd = fd;
+    result->input_file = file;
   }
   if (positionals[1]) {
-    int fd = open(positionals[1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (fd == -1) {
+    FILE* file = fopen(positionals[1], "w");
+    if (!file) {
       perror("cannot open output");
       exit(EXIT_FAILURE);
     }
-    result->output_fd = fd;
+    result->output_file = file;
   }
   result->group_size = min(result->group_size, result->num_columns);
 }
@@ -84,27 +85,22 @@ void parse_cli(const int len, const char** args, cli_args_t* result) {
   parse_dump(len - 1, args + 1, &result->dump_args);
 }
 
-int read_exactly(const int fd, uint8_t* buf, const int size) {
-  int count = 0;
-  while (count != size) {
-    ssize_t r = read(fd, buf, size - count);
-    if (r == 0) return count;
-    else if (r == -1) return -1;
-    count += r;
-    buf += r;
+int read_exactly(FILE* const file, uint8_t* buf, const int size) {
+  size_t r = fread(buf, 1, size, file);
+  if (r != size && ferror(file)) {
+    return -1;
   }
-  return count;
+  else {
+    return r;
+  }
 }
 
-int write_exactly(const int fd, uint8_t* buf, const int size) {
-  int count = 0;
-  while (count != size) {
-    ssize_t r = write(fd, buf, size - count);
-    if (r == -1) return -1;
-    count += r;
-    buf += r;
+int write_exactly(FILE* const file, uint8_t* buf, const int size) {
+  size_t r = fwrite(buf, 1, size, file);
+  if (r != size) {
+    return -1;
   }
-  return count;
+  return r;
 }
 
 int get_hex_width(const int num_columns, const int group_size) {
@@ -193,14 +189,14 @@ void dump(const dump_args_t* args) {
   size_t offset = 0;
   int inbuf_read;
   do {
-    inbuf_read = read_exactly(args->input_fd, inbuf, inbuf_size);
+    inbuf_read = read_exactly(args->input_file, inbuf, inbuf_size);
     if (inbuf_read == -1) {
       perror("input error");
       exit(EXIT_FAILURE);
     }
     int written = render_xxd(inbuf, inbuf_read, args->num_columns, args->group_size, offset, next_rel, o2n_rel, outbuf);
     offset += inbuf_read;
-    if (write_exactly(args->output_fd, outbuf, written) != written) {
+    if (write_exactly(args->output_file, outbuf, written) != written) {
       perror("output error");
       exit(EXIT_FAILURE);
     }
