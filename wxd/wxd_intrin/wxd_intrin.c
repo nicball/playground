@@ -147,7 +147,7 @@ void dump(const dump_args_t* args) {
   uint8_t* const inbuf = (uint8_t*) malloc(inbuf_size);
   uint8_t* const outbuf = (uint8_t*) malloc(outbuf_size);
   const int n2o_size = args->num_columns * 2;
-  const int o2n_size = get_hex_width(args->num_columns, args->group_size);
+  const int o2n_size = get_hex_width(args->num_columns, args->group_size) + 8;
   const int next_rel_size = args->num_columns / 8;
   int* const n2o = (int*) malloc(n2o_size * sizeof(int));
   int* const o2n = (int*) malloc(o2n_size * sizeof(int));

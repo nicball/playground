@@ -1,7 +1,7 @@
 #include <immintrin.h>
 #include "render.h"
 
-void render_line_no(const uint64_t* line_no, uint8_t* const outbuf) {
+void render_line_no(const uint64_t* const line_no, uint8_t* const outbuf) {
   const __m128i to_s = _mm_set_epi8(
     'f', 'e', 'd', 'c', 'b', 'a', '9', '8', '7', '6', '5', '4', '3', '2', '1', '0');
   const __m128i byte = _mm_cvtepu8_epi16(_mm_cvtsi64_si128(_loadbe_i32(line_no)));

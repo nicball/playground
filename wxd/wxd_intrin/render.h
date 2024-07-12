@@ -1,6 +1,6 @@
 #include <stdint.h>
 
-void render_line_no(const uint64_t* line_no, uint8_t* const outbuf);
+void render_line_no(const uint64_t* const line_no, uint8_t* const outbuf);
 
 void render_ascii(const uint8_t* const inbuf, const int32_t inbuf_len, uint8_t* const outbuf);
 
