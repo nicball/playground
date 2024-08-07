@@ -8,7 +8,7 @@ let count = 0;
 function emit(stmt) {
   sql += stmt;
   count += 1;
-  if (count >= 900000) {
+  if (count >= 10000) {
     count = 0;
     sql += 'END TRANSACTION;\n';
     sqls.push(sql);
@@ -34,7 +34,7 @@ for (let fname of ['./history.json']) {
   let json = JSON.parse(readFileSync(fname));
   let gid = json.id;
 
-  emit(`REPLACE INTO tg_group(gid, name) VALUES(-100${gid}, '${escape(json.name)}');\n`);
+  //emit(`REPLACE INTO tg_group(gid, name) VALUES(-100${gid}, '${escape(json.name)}');\n`);
 
   for (let msg of json.messages) {
     if (msg.type !== 'message') continue;
@@ -45,7 +45,7 @@ for (let fname of ['./history.json']) {
     let mid = msg.id;
     if (msg.from === null) msg.from = '';
     let uname = escape(msg.from);
-    emit(`REPLACE INTO tg_user(uid, name) VALUES(${uid}, '${uname}');\n`);
+    //emit(`REPLACE INTO tg_user(uid, name) VALUES(${uid}, '${uname}');\n`);
     emit(`REPLACE INTO message(gid, uid, mid, msgtext, sendat) VALUES(-100${gid}, ${uid}, ${mid}, '${text}', ${sendat});\n`);
   }
 }
