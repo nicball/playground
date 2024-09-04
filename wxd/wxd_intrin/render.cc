@@ -1,8 +1,9 @@
 #include <immintrin.h>
 #include <stdio.h>
 #include <string.h>
-#include "render.h"
-#include "util.h"
+#include <algorithm>
+#include "render.hh"
+#include "util.hh"
 
 int get_hex_width(const int num_columns, const int group_size) {
   int num_groups = num_columns / group_size;
@@ -164,7 +165,7 @@ int render_xxd(const uint8_t* const inbuf, const int inbuf_len, size_t offset, s
   const int line_width = get_line_width(ropt->num_columns, ropt->group_size);
   for (int inbase = 0; inbase < inbuf_len; inbase += ropt->num_columns) {
     const int outbase = inbase / ropt->num_columns * line_width;
-    const int r = min(ropt->num_columns, inbuf_len - inbase);
+    const int r = std::min(ropt->num_columns, inbuf_len - inbase);
     render_line_no(&offset, &outbuf[outbase]);
     outbuf[outbase + 8] = ':';
     outbuf[outbase + 9] = ' ';

@@ -3,10 +3,14 @@
 #include <string.h>
 #include <stdint.h>
 #include <assert.h>
+#include <algorithm>
+#include <thread>
+#include <memory>
+#include <vector>
 #include <unistd.h>
 #include <fcntl.h>
-#include "render.h"
-#include "util.h"
+#include "render.hh"
+#include "util.hh"
 
 typedef enum {
   CMD_DUMP
@@ -72,7 +76,7 @@ void parse_dump(const int len, const char** args, dump_args_t* result) {
     }
     result->output_file = file;
   }
-  result->group_size = min(result->group_size, result->num_columns);
+  result->group_size = std::min(result->group_size, result->num_columns);
 }
 
 void parse_cli(const int len, const char** args, cli_args_t* result) {
@@ -107,31 +111,63 @@ void dump(const dump_args_t* args) {
   const int num_lines = 1024;
   const int inbuf_size = args->num_columns * num_lines;
   const int outbuf_size = line_width * num_lines;
-  uint8_t* const inbuf = (uint8_t*) malloc(inbuf_size);
-  uint8_t* const outbuf = (uint8_t*) malloc(outbuf_size);
+  using buffer_ptr = std::unique_ptr<std::vector<uint8_t>>;
+  channel<2, buffer_ptr> inbuf_pool;
+  for (int i = 0; i < 2; ++i) {
+    inbuf_pool.put(new std::vector<uint8_t>(inbuf_size));
+  }
+  channel<2, buffer_ptr> outbuf_pool;
+  for (int i = 0; i < 2; ++i) {
+    outbuf_pool.put(new std::vector<uint8_t>(outbuf_size));
+  }
   struct render_option ropt;
   initialize_render_option(args->num_columns, args->group_size, &ropt);
-  if (!inbuf || !outbuf) {
-    perror("allocation error");
-    exit(EXIT_FAILURE);
-  }
-  size_t offset = 0;
-  int inbuf_read;
-  do {
-    inbuf_read = read_exactly(args->input_file, inbuf, inbuf_size);
-    if (inbuf_read == -1) {
-      perror("input error");
-      exit(EXIT_FAILURE);
+  channel<1, std::tuple<size_t, int, buffer_ptr, buffer_ptr>> rd2xc;
+  channel<1, std::tuple<bool, int, buffer_ptr>> xc2wr;
+  std::thread reader{[&] {
+    size_t offset = 0;
+    int inbuf_read;
+    do {
+      auto inbuf = inbuf_pool.take();
+      inbuf_read = read_exactly(args->input_file, inbuf->data(), inbuf_size);
+      if (inbuf_read == -1) {
+        perror("input error");
+        exit(EXIT_FAILURE);
+      }
+      auto outbuf = outbuf_pool.take();
+      // printf("allocated buf (%p, %p), read %d bytes.\n", inbuf.get(), outbuf.get(), inbuf_read);
+      rd2xc.put(offset, inbuf_read, std::move(inbuf), std::move(outbuf));
+      offset += inbuf_read;
+    } while (inbuf_read != 0);
+  }};
+  std::thread transcoder{[&] {
+    for (;;) {
+      auto [offset, inbuf_read, inbuf, outbuf] = rd2xc.take();
+      // printf("received inbuf %p with %d bytes.\n", inbuf.get(), inbuf_read);
+      if (inbuf_read == 0) break;
+      int written = render_xxd(inbuf->data(), inbuf_read, offset, &ropt, outbuf->data());
+      // printf("freeing inbuf %p.\n", inbuf.get());
+      inbuf_pool.put(std::move(inbuf));
+      xc2wr.put(true, written, std::move(outbuf));
     }
-    int written = render_xxd(inbuf, inbuf_read, offset, &ropt, outbuf);
-    offset += inbuf_read;
-    if (write_exactly(args->output_file, outbuf, written) != written) {
-      perror("output error");
-      exit(EXIT_FAILURE);
+    xc2wr.put(false, 0, nullptr);
+  }};
+  std::thread writer{[&] {
+    for (;;) {
+      auto [to_continue, written, outbuf] = xc2wr.take();
+      // printf("received outbuf %p with %d bytes.\n", outbuf.get(), written);
+      if (!to_continue) break;
+      if (write_exactly(args->output_file, outbuf->data(), written) != written) {
+        perror("output error");
+        exit(EXIT_FAILURE);
+      }
+      // printf("freeing outbuf %p.\n", outbuf.get());
+      outbuf_pool.put(std::move(outbuf));
     }
-  } while (inbuf_read == inbuf_size);
-  free(inbuf);
-  free(outbuf);
+  }};
+  reader.join();
+  transcoder.join();
+  writer.join();
   finalize_render_option(&ropt);
 }
 
