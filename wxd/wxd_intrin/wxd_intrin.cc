@@ -9,8 +9,8 @@
 #include <vector>
 #include <unistd.h>
 #include <fcntl.h>
-#include "render.hh"
-#include "util.hh"
+#include "render.h"
+#include "channel.h"
 
 typedef enum {
   CMD_DUMP
@@ -107,10 +107,10 @@ int write_exactly(FILE* const file, uint8_t* buf, const int size) {
 }
 
 void dump(const dump_args_t* args) {
-  const int line_width = get_line_width(args->num_columns, args->group_size);
+  renderer ren{args->num_columns, args->group_size};
   const int num_lines = 1024;
   const int inbuf_size = args->num_columns * num_lines;
-  const int outbuf_size = line_width * num_lines;
+  const int outbuf_size = ren.get_line_width() * num_lines;
   using buffer_ptr = std::unique_ptr<std::vector<uint8_t>>;
   channel<2, buffer_ptr> inbuf_pool;
   for (int i = 0; i < 2; ++i) {
@@ -120,11 +120,9 @@ void dump(const dump_args_t* args) {
   for (int i = 0; i < 2; ++i) {
     outbuf_pool.put(new std::vector<uint8_t>(outbuf_size));
   }
-  struct render_option ropt;
-  initialize_render_option(args->num_columns, args->group_size, &ropt);
   channel<1, std::tuple<size_t, int, buffer_ptr, buffer_ptr>> rd2xc;
   channel<1, std::tuple<bool, int, buffer_ptr>> xc2wr;
-  std::thread reader{[&] {
+  std::jthread reader{[&] {
     size_t offset = 0;
     int inbuf_read;
     do {
@@ -140,19 +138,19 @@ void dump(const dump_args_t* args) {
       offset += inbuf_read;
     } while (inbuf_read != 0);
   }};
-  std::thread transcoder{[&] {
+  std::jthread transcoder{[&] {
     for (;;) {
       auto [offset, inbuf_read, inbuf, outbuf] = rd2xc.take();
       // printf("received inbuf %p with %d bytes.\n", inbuf.get(), inbuf_read);
       if (inbuf_read == 0) break;
-      int written = render_xxd(inbuf->data(), inbuf_read, offset, &ropt, outbuf->data());
+      int written = ren.render_xxd(inbuf->data(), inbuf_read, offset, outbuf->data());
       // printf("freeing inbuf %p.\n", inbuf.get());
       inbuf_pool.put(std::move(inbuf));
       xc2wr.put(true, written, std::move(outbuf));
     }
     xc2wr.put(false, 0, nullptr);
   }};
-  std::thread writer{[&] {
+  std::jthread writer{[&] {
     for (;;) {
       auto [to_continue, written, outbuf] = xc2wr.take();
       // printf("received outbuf %p with %d bytes.\n", outbuf.get(), written);
@@ -165,10 +163,6 @@ void dump(const dump_args_t* args) {
       outbuf_pool.put(std::move(outbuf));
     }
   }};
-  reader.join();
-  transcoder.join();
-  writer.join();
-  finalize_render_option(&ropt);
 }
 
 int main(int argc, const char** argv) {

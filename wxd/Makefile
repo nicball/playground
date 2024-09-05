@@ -12,6 +12,6 @@ target/wxd_ispc: wxd_ispc/wxd_ispc.c wxd_ispc/render_xxd.ispc
 target/wxd_mmap: bad/wxd_mmap.c
 	gcc bad/wxd_mmap.c -o target/wxd_mmap -O3 -g -Wall -pedantic
 
-target/wxd_intrin: wxd_intrin/wxd_intrin.cc wxd_intrin/render.cc wxd_intrin/render.hh wxd_intrin/util.hh
-	clang++ --std=c++17 -O2 -march=znver3 wxd_intrin/wxd_intrin.cc wxd_intrin/render.cc -Iwxd_intrin -o target/wxd_intrin -g -Wall -pedantic
+target/wxd_intrin: wxd_intrin/wxd_intrin.cc wxd_intrin/render.cc wxd_intrin/render.h wxd_intrin/channel.h
+	clang++ --std=c++20 -O2 -march=znver3 wxd_intrin/wxd_intrin.cc wxd_intrin/render.cc -Iwxd_intrin -o target/wxd_intrin -g -Wall -pedantic
 
