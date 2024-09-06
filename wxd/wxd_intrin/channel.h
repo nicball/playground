@@ -10,7 +10,7 @@ class channel {
   std::mutex mutex;
 
 public:
-  channel() = default;
+  const size_t size = N;
   T take() {
     std::unique_lock lock(mutex);
     full.wait(lock, [this] { return data.size() > 0; });
