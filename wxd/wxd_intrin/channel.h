@@ -1,8 +1,9 @@
 #include <queue>
 #include <condition_variable>
 #include <mutex>
+#include <limits>
 
-template <size_t N, class T>
+template <class T, size_t N = std::numeric_limits<size_t>::max()>
 class channel {
   std::queue<T> data;
   std::condition_variable empty;

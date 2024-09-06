@@ -20,6 +20,7 @@ typedef enum {
 typedef struct {
   int num_columns;
   int group_size;
+  int num_jobs;
   FILE* input_file;
   FILE* output_file;
 } dump_args_t;
@@ -36,6 +37,7 @@ void parse_dump(const int len, const char** args, dump_args_t* result) {
   int got_positionals = 0;
   result->group_size = 2;
   result->num_columns = 16;
+  result->num_jobs = 2;
   result->input_file = stdin;
   result->output_file = stdout;
   for (int i = 0; i < len; ++i) {
@@ -50,6 +52,13 @@ void parse_dump(const int len, const char** args, dump_args_t* result) {
       ++i;
       if (!sscanf(args[i], "%d", &result->num_columns) || result->num_columns <= 0) {
         fprintf(stderr, "invalid columns number: %s\n", args[i]);
+        exit(EXIT_FAILURE);
+      }
+    }
+    else if (!strcmp(args[i], "-j") || !strcmp(args[i], "--num-jobs")) {
+      ++i;
+      if (!sscanf(args[i], "%d", &result->num_jobs) || result->num_jobs <= 0) {
+        fprintf(stderr, "invalid jobs number: %s\n", args[i]);
         exit(EXIT_FAILURE);
       }
     }
@@ -112,18 +121,18 @@ void dump(const dump_args_t* args) {
   const int num_lines = 1024;
   const int inbuf_size = args->num_columns * num_lines;
   const int outbuf_size = ren.get_line_width() * num_lines;
-  const int num_workers = 2;
+  const int num_workers = args->num_jobs;
   using buffer_ptr = std::unique_ptr<std::vector<uint8_t>>;
-  channel<2 * num_workers, buffer_ptr> inbuf_pool;
-  for (int i = 0; i < inbuf_pool.size; ++i) {
+  channel<buffer_ptr> inbuf_pool;
+  for (int i = 0; i < num_workers * 2; ++i) {
     inbuf_pool.put(new std::vector<uint8_t>(inbuf_size));
   }
-  channel<2 * num_workers, buffer_ptr> outbuf_pool;
-  for (int i = 0; i < inbuf_pool.size; ++i) {
+  channel<buffer_ptr> outbuf_pool;
+  for (int i = 0; i < num_workers * 2; ++i) {
     outbuf_pool.put(new std::vector<uint8_t>(outbuf_size));
   }
-  channel<1, std::tuple<size_t, int, buffer_ptr, buffer_ptr>> rd2xc;
-  channel<1, std::tuple<bool, int, buffer_ptr>> xc2wr;
+  channel<std::tuple<size_t, int, buffer_ptr, buffer_ptr>, 1> rd2xc;
+  channel<std::tuple<bool, int, buffer_ptr>, 1> xc2wr;
   std::jthread reader{[&] {
     size_t offset = 0;
     int inbuf_read;
@@ -141,9 +150,9 @@ void dump(const dump_args_t* args) {
     } while (inbuf_read != 0);
   }};
   std::jthread transcoder{[&] {
-    std::vector<channel<1, std::tuple<int, size_t, int, buffer_ptr, buffer_ptr>>> work_queues(num_workers);
+    std::vector<channel<std::tuple<int, size_t, int, buffer_ptr, buffer_ptr>, 1>> work_queues(num_workers);
     std::vector<std::jthread> workers;
-    channel<num_workers, std::tuple<int, bool, int, buffer_ptr>> commit_queue;
+    channel<std::tuple<int, bool, int, buffer_ptr>> commit_queue;
     for (int i = 0; i < num_workers; ++i) {
       workers.emplace_back([&, worker_id = i] {
         for (;;) {
