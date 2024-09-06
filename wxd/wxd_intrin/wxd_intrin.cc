@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,10 +9,15 @@
 #include <memory>
 #include <vector>
 #include <queue>
+#include <optional>
+#include <span>
 #include <unistd.h>
 #include <fcntl.h>
 #include "render.h"
 #include "channel.h"
+
+// #define DEBUG(...) fprintf(stderr, __VA_ARGS__)
+#define DEBUG(...)
 
 typedef enum {
   CMD_DUMP
@@ -117,10 +123,10 @@ int write_exactly(FILE* const file, uint8_t* buf, const int size) {
 }
 
 void dump(const dump_args_t* args) {
-  renderer ren{args->num_columns, args->group_size};
-  const int num_lines = 1024;
+  renderer renderer{args->num_columns, args->group_size};
+  const int num_lines = 1024 * args->num_jobs;
   const int inbuf_size = args->num_columns * num_lines;
-  const int outbuf_size = ren.get_line_width() * num_lines;
+  const int outbuf_size = renderer.get_line_width() * num_lines;
   const int num_workers = args->num_jobs;
   using buffer_ptr = std::unique_ptr<std::vector<uint8_t>>;
   channel<buffer_ptr> inbuf_pool;
@@ -131,8 +137,18 @@ void dump(const dump_args_t* args) {
   for (int i = 0; i < num_workers * 2; ++i) {
     outbuf_pool.put(new std::vector<uint8_t>(outbuf_size));
   }
-  channel<std::tuple<size_t, int, buffer_ptr, buffer_ptr>, 1> rd2xc;
-  channel<std::tuple<bool, int, buffer_ptr>, 1> xc2wr;
+  struct inblock {
+    size_t offset;
+    int inbuf_read;
+    buffer_ptr inbuf;
+    buffer_ptr outbuf;
+  };
+  channel<std::optional<inblock>, 1> rd2xc;
+  struct outblock {
+    int written;
+    buffer_ptr outbuf;
+  };
+  channel<std::optional<outblock>, 1> xc2wr;
   std::jthread reader{[&] {
     size_t offset = 0;
     int inbuf_read;
@@ -144,86 +160,140 @@ void dump(const dump_args_t* args) {
         exit(EXIT_FAILURE);
       }
       auto outbuf = outbuf_pool.take();
-      // printf("allocated buf (%p, %p), read %d bytes.\n", inbuf.get(), outbuf.get(), inbuf_read);
-      rd2xc.put(offset, inbuf_read, std::move(inbuf), std::move(outbuf));
+      DEBUG("reader: allocated buf (%p, %p), read %d bytes.\n", (void*)inbuf.get(), (void*)outbuf.get(), inbuf_read);
+      if (inbuf_read == 0) rd2xc.put(std::nullopt);
+      else rd2xc.put(std::in_place, offset, inbuf_read, std::move(inbuf), std::move(outbuf));
       offset += inbuf_read;
     } while (inbuf_read != 0);
   }};
   std::jthread transcoder{[&] {
-    std::vector<channel<std::tuple<int, size_t, int, buffer_ptr, buffer_ptr>, 1>> work_queues(num_workers);
+    struct work_item {
+      int work_id;
+      size_t offset;
+      std::vector<uint8_t>* inbuf_base;
+      std::span<uint8_t> inbuf;
+      std::vector<uint8_t>* outbuf_base;
+      std::span<uint8_t> outbuf;
+    };
+    std::vector<channel<std::optional<work_item>, 1>> work_queues(num_workers);
     std::vector<std::jthread> workers;
-    channel<std::tuple<int, bool, int, buffer_ptr>> commit_queue;
+    struct commit_item {
+      int work_id;
+      int partly_written;
+      std::vector<uint8_t>* inbuf;
+      std::vector<uint8_t>* outbuf;
+      bool operator<(const commit_item& other) const {
+        return work_id > other.work_id;
+      }
+    };
+    channel<std::optional<commit_item>> commit_queue;
     for (int i = 0; i < num_workers; ++i) {
       workers.emplace_back([&, worker_id = i] {
         for (;;) {
-          auto [work_id, offset, inbuf_read, inbuf, outbuf] = work_queues[worker_id].take();
-          // printf("received inbuf %p with %d bytes.\n", inbuf.get(), inbuf_read);
-          if (inbuf_read == 0) {
-            commit_queue.put(0, false, 0, nullptr);
+          auto work = work_queues[worker_id].take();
+          if (!work) {
+            commit_queue.put(std::nullopt);
             break;
           }
-          int written = ren.render_xxd(inbuf->data(), inbuf_read, offset, outbuf->data());
-          // printf("freeing inbuf %p.\n", inbuf.get());
-          inbuf_pool.put(std::move(inbuf));
-          commit_queue.put(work_id, true, written, std::move(outbuf));
+          DEBUG("worker %d: got buffer %p(size=%d)\n", worker_id, (void*)work->inbuf.data(), (int)work->inbuf.size());
+          int written = renderer.render_xxd(
+            work->inbuf.data(),
+            work->inbuf.size(),
+            work->offset,
+            work->outbuf.data()
+          );
+          commit_queue.put(std::in_place, work->work_id, written, work->inbuf_base, work->outbuf_base);
         }
       });
     }
     std::jthread sequencer{[&] {
       int next_work_id = 0;
+      int current_size = 0;
+      std::vector<uint8_t>* current_inbuf;
+      std::vector<uint8_t>* current_outbuf;
+      int current_written;
       int done_count = 0;
-      using work_item = std::tuple<int, int, std::vector<uint8_t>*>;
-      std::priority_queue<work_item, std::vector<work_item>, std::greater<work_item>> wait_queue;
+      std::priority_queue<commit_item> wait_queue;
       for (;;) {
-        auto [work_id, to_continue, written, outbuf] = commit_queue.take();
-        if (!to_continue) {
+        auto commit = commit_queue.take();
+        if (!commit) {
           ++done_count;
           if (done_count == num_workers) {
-            xc2wr.put(false, 0, nullptr);
+            xc2wr.put(std::nullopt);
             break;
           }
         }
-        else if (next_work_id == work_id) {
-          xc2wr.put(true, written, std::move(outbuf));
-          ++next_work_id;
-          while (!wait_queue.empty() && std::get<0>(wait_queue.top()) == next_work_id) {
-            auto w = wait_queue.top();
-            wait_queue.pop();
-            xc2wr.put(true, std::get<1>(w), std::get<2>(w));
-            ++next_work_id;
-          }
-        }
         else {
-          wait_queue.emplace(work_id, written, outbuf.release());
+          DEBUG("sequencer: got commit %d\n", commit->work_id);
+          wait_queue.emplace(std::move(*commit));
+          while (wait_queue.top().work_id == next_work_id) {
+            ++next_work_id;
+            if (current_size == 0) {
+              current_inbuf = wait_queue.top().inbuf;
+              current_outbuf = wait_queue.top().outbuf;
+              current_written = wait_queue.top().partly_written;
+            }
+            else {
+              assert(wait_queue.top().inbuf == current_inbuf);
+              assert(wait_queue.top().outbuf == current_outbuf);
+              current_written += wait_queue.top().partly_written;
+            }
+            ++current_size;
+            wait_queue.pop();
+            if (current_size == num_workers) {
+              current_size = 0;
+              inbuf_pool.put(buffer_ptr{current_inbuf});
+              xc2wr.put(std::in_place, current_written, buffer_ptr{current_outbuf});
+            }
+          }
         }
       }
     }};
-    int work_count = 0;
-    for (;;) {
-      auto [offset, inbuf_read, inbuf, outbuf] = rd2xc.take();
-      if (inbuf_read == 0) {
-        for (int i = 0; i < num_workers; ++i) {
-          work_queues[i].put(0, 0, 0, nullptr, nullptr);
+    /* balancer */ {
+      int work_count = 0;
+      for (;;) {
+        auto inblock = rd2xc.take();
+        if (!inblock) {
+          for (int i = 0; i < num_workers; ++i) {
+            work_queues[i].put(std::nullopt);
+          }
+          break;
         }
-        break;
-      }
-      else {
-        work_queues[work_count % num_workers].put(work_count, offset, inbuf_read, std::move(inbuf), std::move(outbuf));
-        ++work_count;
+        else {
+          int worker_num_lines = inblock->inbuf_read / args->num_columns / num_workers;
+          int inbuf_size = worker_num_lines * args->num_columns;
+          int outbuf_size = worker_num_lines * renderer.get_line_width();
+          int rest = inblock->inbuf_read - (inbuf_size * (num_workers - 1));
+          std::vector<uint8_t>* inbuf = inblock->inbuf.release();
+          std::vector<uint8_t>* outbuf = inblock->outbuf.release();
+          for (int i = 0; i < num_workers; ++i) {
+            DEBUG("balancer: dispatching work to worker %d\n", i);
+            work_queues[i].put(
+              std::in_place,
+              work_count + i,
+              inblock->offset + inbuf_size * i,
+              inbuf,
+              std::span{&inbuf->data()[inbuf_size * i], static_cast<size_t>((i == num_workers - 1) ? rest : inbuf_size)},
+              outbuf,
+              std::span{&outbuf->data()[outbuf_size * i], static_cast<size_t>(outbuf_size)}
+            );
+          }
+          work_count += num_workers;
+        }
       }
     }
   }};
   std::jthread writer{[&] {
     for (;;) {
-      auto [to_continue, written, outbuf] = xc2wr.take();
-      // printf("received outbuf %p with %d bytes.\n", outbuf.get(), written);
-      if (!to_continue) break;
-      if (write_exactly(args->output_file, outbuf->data(), written) != written) {
+      auto outblock = xc2wr.take();
+      if (!outblock) break;
+      DEBUG("received outbuf %p with %d bytes.\n", (void*)outblock->outbuf.get(), outblock->written);
+      if (write_exactly(args->output_file, outblock->outbuf->data(), outblock->written) != outblock->written) {
         perror("output error");
         exit(EXIT_FAILURE);
       }
-      // printf("freeing outbuf %p.\n", outbuf.get());
-      outbuf_pool.put(std::move(outbuf));
+      DEBUG("freeing outbuf %p.\n", (void*)outblock->outbuf.get());
+      outbuf_pool.put(std::move(outblock->outbuf));
     }
   }};
 }
