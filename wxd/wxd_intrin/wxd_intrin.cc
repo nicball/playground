@@ -1,23 +1,22 @@
-#include <cstdint>
+#include <assert.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
-#include <assert.h>
 #include <algorithm>
-#include <thread>
 #include <memory>
-#include <vector>
-#include <queue>
 #include <optional>
+#include <queue>
 #include <span>
-#include <unistd.h>
+#include <string>
+#include <string>
+#include <thread>
+#include <vector>
 #include <fcntl.h>
-#include "render.h"
+#include <unistd.h>
 #include "channel.h"
-
-// #define DEBUG(...) fprintf(stderr, __VA_ARGS__)
-#define DEBUG(...)
+#include "log.h"
+#include "render.h"
 
 typedef enum {
   CMD_DUMP
@@ -124,17 +123,17 @@ int write_exactly(FILE* const file, uint8_t* buf, const int size) {
 
 void dump(const dump_args_t* args) {
   renderer renderer{args->num_columns, args->group_size};
-  const int num_lines = 1024 * args->num_jobs;
+  const int num_lines = 2048 * args->num_jobs;
   const int inbuf_size = args->num_columns * num_lines;
   const int outbuf_size = renderer.get_line_width() * num_lines;
   const int num_workers = args->num_jobs;
   using buffer_ptr = std::unique_ptr<std::vector<uint8_t>>;
-  channel<buffer_ptr> inbuf_pool;
-  for (int i = 0; i < num_workers * 2; ++i) {
+  channel<buffer_ptr> inbuf_pool{"inbuf_pool"};
+  for (int i = 0; i < num_workers * 4; ++i) {
     inbuf_pool.put(new std::vector<uint8_t>(inbuf_size));
   }
-  channel<buffer_ptr> outbuf_pool;
-  for (int i = 0; i < num_workers * 2; ++i) {
+  channel<buffer_ptr> outbuf_pool{"outbuf_pool"};
+  for (int i = 0; i < num_workers * 4; ++i) {
     outbuf_pool.put(new std::vector<uint8_t>(outbuf_size));
   }
   struct inblock {
@@ -143,12 +142,12 @@ void dump(const dump_args_t* args) {
     buffer_ptr inbuf;
     buffer_ptr outbuf;
   };
-  channel<std::optional<inblock>, 1> rd2xc;
+  channel<std::optional<inblock>> rd2xc{"rd2xc"};
   struct outblock {
     int written;
     buffer_ptr outbuf;
   };
-  channel<std::optional<outblock>, 1> xc2wr;
+  channel<std::optional<outblock>> xc2wr{"xc2wr"};
   std::jthread reader{[&] {
     size_t offset = 0;
     int inbuf_read;
@@ -160,7 +159,7 @@ void dump(const dump_args_t* args) {
         exit(EXIT_FAILURE);
       }
       auto outbuf = outbuf_pool.take();
-      DEBUG("reader: allocated buf (%p, %p), read %d bytes.\n", (void*)inbuf.get(), (void*)outbuf.get(), inbuf_read);
+      LOG_DEBUG("reader: allocated buf (%p, %p), read %d bytes.\n", (void*)inbuf.get(), (void*)outbuf.get(), inbuf_read);
       if (inbuf_read == 0) rd2xc.put(std::nullopt);
       else rd2xc.put(std::in_place, offset, inbuf_read, std::move(inbuf), std::move(outbuf));
       offset += inbuf_read;
@@ -175,7 +174,11 @@ void dump(const dump_args_t* args) {
       std::vector<uint8_t>* outbuf_base;
       std::span<uint8_t> outbuf;
     };
-    std::vector<channel<std::optional<work_item>, 1>> work_queues(num_workers);
+    std::vector<std::string> names;
+    for (int i = 0; i < num_workers; ++i) {
+      names.emplace_back("work_queue_" + std::to_string(i));
+    }
+    std::vector<channel<std::optional<work_item>>> work_queues{names.begin(), names.end()};
     std::vector<std::jthread> workers;
     struct commit_item {
       int work_id;
@@ -186,7 +189,7 @@ void dump(const dump_args_t* args) {
         return work_id > other.work_id;
       }
     };
-    channel<std::optional<commit_item>> commit_queue;
+    channel<std::optional<commit_item>> commit_queue{"commit_queue"};
     for (int i = 0; i < num_workers; ++i) {
       workers.emplace_back([&, worker_id = i] {
         for (;;) {
@@ -195,7 +198,7 @@ void dump(const dump_args_t* args) {
             commit_queue.put(std::nullopt);
             break;
           }
-          DEBUG("worker %d: got buffer %p(size=%d)\n", worker_id, (void*)work->inbuf.data(), (int)work->inbuf.size());
+          LOG_DEBUG("worker %d: got buffer %p with %d bytes.\n", worker_id, (void*)work->inbuf.data(), (int)work->inbuf.size());
           int written = renderer.render_xxd(
             work->inbuf.data(),
             work->inbuf.size(),
@@ -224,7 +227,7 @@ void dump(const dump_args_t* args) {
           }
         }
         else {
-          DEBUG("sequencer: got commit %d\n", commit->work_id);
+          LOG_DEBUG("sequencer: got commit %d\n", commit->work_id);
           wait_queue.emplace(std::move(*commit));
           while (wait_queue.top().work_id == next_work_id) {
             ++next_work_id;
@@ -267,7 +270,7 @@ void dump(const dump_args_t* args) {
           std::vector<uint8_t>* inbuf = inblock->inbuf.release();
           std::vector<uint8_t>* outbuf = inblock->outbuf.release();
           for (int i = 0; i < num_workers; ++i) {
-            DEBUG("balancer: dispatching work to worker %d\n", i);
+            LOG_DEBUG("balancer: dispatching work to worker %d\n", i);
             work_queues[i].put(
               std::in_place,
               work_count + i,
@@ -287,12 +290,12 @@ void dump(const dump_args_t* args) {
     for (;;) {
       auto outblock = xc2wr.take();
       if (!outblock) break;
-      DEBUG("received outbuf %p with %d bytes.\n", (void*)outblock->outbuf.get(), outblock->written);
+      LOG_DEBUG("received outbuf %p with %d bytes.\n", (void*)outblock->outbuf.get(), outblock->written);
       if (write_exactly(args->output_file, outblock->outbuf->data(), outblock->written) != outblock->written) {
         perror("output error");
         exit(EXIT_FAILURE);
       }
-      DEBUG("freeing outbuf %p.\n", (void*)outblock->outbuf.get());
+      LOG_DEBUG("freeing outbuf %p.\n", (void*)outblock->outbuf.get());
       outbuf_pool.put(std::move(outblock->outbuf));
     }
   }};
