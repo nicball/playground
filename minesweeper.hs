@@ -79,9 +79,11 @@ lookupVar :: VarTable -> Int -> Point
 lookupVar vt n = vt !! n
 
 constrToRow :: Num a => VarTable -> Constraint a -> Row a
-constrToRow vt (ps, num) = [ if Set.member n vars then 1 else 0 | n <- [ 0 .. numVars - 1 ] ] ++ [ num ] where
+constrToRow vt (ps, num) = [ if Set.member n vars then multiplicity n else 0 | n <- [ 0 .. numVars - 1 ] ] ++ [ num ] where
   vars = Set.fromList . map (lookupPoint vt) $ ps
   numVars = length vt
+  multiplicity n = if even (fst p + snd p) then 1 else 2 where
+    p = lookupVar vt n
 
 rowMaximum :: (Ord a, Num a) => Row a -> a
 rowMaximum = sum . filter (> 0) . init
@@ -89,7 +91,7 @@ rowMaximum = sum . filter (> 0) . init
 rowMinimum :: (Ord a, Num a) => Row a -> a
 rowMinimum = sum . filter (< 0) . init
 
-data Info a = IsMine a | IsNum a deriving (Functor, Show)
+data Info a = IsMine a | IsNum a deriving (Functor, Show, Eq, Ord)
 
 solveRow :: (Ord a, Num a) => Row a -> [Info Int]
 solveRow row
@@ -164,14 +166,12 @@ test_staircase = staircase exampleMatrix
 test_clearDown = clearDown test_staircase
 test_clearUp = clearUp test_clearDown
 
-exampleBoard = boardFromScrshot 7 $
-  [ [ o, o, 2, 2, o, x, o ]
-  , [ 2, 3, o, o, o, 5, o ]
-  , [ o, o, o, o, o, 5, o ]
-  , [ 2, o, 3, o, o, o, o ]
-  , [ 1, o, o, o, 4, o, 3 ]
-  , [ o, o, o, o, o, 4, x ]
-  , [ o, o, o, o, o, o, o ]
+exampleBoard = boardFromScrshot 5 $
+  [ [ o, o, o, o, o ]
+  , [ o, o, o, o, o ]
+  , [ o, o, 4, o, o ]
+  , [ o, o, o, o, 2 ]
+  , [ o, o, o, 4, o ]
   ] where
   o = -2 -- unknown
   x = -1 -- secret number
@@ -186,13 +186,14 @@ main = do
     vt = allocateVars constrs
     mat = gaussElim . map (constrToRow vt) $ constrs
   print vt
-  -- printMat (map (constrToRow vt) constrs)
+  printMat (map (constrToRow vt) constrs)
   -- printMat (staircase (map (constrToRow vt) constrs))
   printMat mat
   let
     info = concatMap solveRow mat
     mat' = gaussElim . updateEquations info $ mat
   print (map (translateInfo vt) info)
-  printMat mat'
+  -- printMat mat'
+  -- print (map (translateInfo vt) (concatMap solveRow mat'))
   -- print (concatMap solveRow mat')
   print (solveBoard exampleBoard)
