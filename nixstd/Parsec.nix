@@ -59,14 +59,17 @@ rec {
 
   space = match-char-if (c: c == " " || c == "\t" || c == "\n");
 
-  numeric = match-char-if (c: c == "0" || c == "1" || c == "2" || c == "3" || c == "4" || c == "5" || c == "6" || c == "7" || c == "8" || c == "9");
+  numeric =
+    let
+      to-int = n: { "0" = 0; "1" = 1; "2" = 2; "3" = 3; "4" = 4; "5" = 5; "6" = 6; "7" = 7; "8" = 8; "9" = 9; }.${n};
+    in
+    functor.map to-int (match-char-if (c: c == "0" || c == "1" || c == "2" || c == "3" || c == "4" || c == "5" || c == "6" || c == "7" || c == "8" || c == "9"));
 
   number =
     let
-      digit = n: { "0" = 0; "1" = 1; "2" = 2; "3" = 3; "4" = 4; "5" = 5; "6" = 6; "7" = 7; "8" = 8; "9" = 9; }.${n};
-      list-to-int = builtins.foldl' (a: n: a * 10 + digit n) 0;
+      to-int = builtins.foldl' (a: n: a * 10 + n) 0;
     in
-    functor.map list-to-int (some numeric);
+    functor.map to-int (some numeric);
 
   sep-by = sep: p:
     monad.bind p (a-p:
