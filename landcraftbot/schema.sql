@@ -24,3 +24,9 @@ CREATE TABLE IF NOT EXISTS message (
   sendat INTEGER,
   UNIQUE (gid, uid, mid)
 );
+
+CREATE VIRTUAL TABLE IF NOT EXISTS search USING fts5(msgtext, tokenize="trigram", content=message);
+CREATE TRIGGER IF NOT EXISTS trig_ins_msg_search AFTER INSERT ON message BEGIN
+  INSERT INTO search(rowid, msgtext) VALUES(new.rowid, new.msgtext);
+end;
+

@@ -75,15 +75,15 @@ async function searchSth(db, key) {
 }
 
 async function searchHistory(db, key, gid) {
-  let esckey = key.replaceAll('.', '..').replaceAll('%', '.%').replaceAll('_', '._');
-  let glob = '%' + esckey.split(' ').join('%') + '%';
+  // let esckey = key.replaceAll('.', '..').replaceAll('%', '.%').replaceAll('_', '._');
+  // let glob = '%' + esckey.split(' ').join('%') + '%';
   return (await db.prepare(`
       SELECT tg_group.name AS groupName, tg_user.name AS userName, msgtext AS message, message.gid AS groupId, message.mid AS messageId
       FROM message LEFT JOIN tg_user ON message.uid = tg_user.uid LEFT JOIN tg_group ON message.gid = tg_group.gid
-      WHERE msgtext LIKE ? ESCAPE '.' ${gid ? 'AND message.gid = ' + gid : ''}
+      WHERE message.rowid in (SELECT rowid FROM search(?)) ${gid ? 'AND message.gid = ' + gid : ''}
       ORDER BY sendat ASC
       LIMIT 100
-    `).bind(glob)
+    `).bind(key)
     .all())
     .results;
 }
