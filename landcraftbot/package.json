@@ -2,7 +2,7 @@
   "name": "landcraftbot",
   "version": "0.0.0",
   "devDependencies": {
-    "wrangler": "3.19.0"
+    "wrangler": "4.13.2"
   },
   "private": true,
   "scripts": {
