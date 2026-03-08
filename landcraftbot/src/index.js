@@ -79,8 +79,8 @@ async function searchHistory(db, key, gid) {
   // let glob = '%' + esckey.split(' ').join('%') + '%';
   return (await db.prepare(`
       SELECT tg_group.name AS groupName, tg_user.name AS userName, msgtext AS message, message.gid AS groupId, message.mid AS messageId
-      FROM message LEFT JOIN tg_user ON message.uid = tg_user.uid LEFT JOIN tg_group ON message.gid = tg_group.gid
-      WHERE message.rowid in (SELECT rowid FROM search(?)) ${gid ? 'AND message.gid = ' + gid : ''}
+      FROM (SELECT rowid FROM search(?)) AS sc LEFT JOIN message ON message.rowid = sc.rowid LEFT JOIN tg_user ON message.uid = tg_user.uid LEFT JOIN tg_group ON message.gid = tg_group.gid
+      ${gid ? ('WHERE message.gid = ' + gid) : ''}
       ORDER BY sendat ASC
       LIMIT 100
     `).bind(key)
@@ -112,8 +112,18 @@ export default {
       console.log(JSON.stringify(json));
       let msg = json.message;
       if (msg) await logMessage(env.saysth, msg);
+      else throw "non message update";
       let [cmd, args] = parseCommand(msg);
       args = args.trimStart();
+      if (msg.via_bot && msg.via_bot.id === 6465471545) {
+        console.log('found bots');
+        return jsonResponse({
+          method: 'deleteMessage',
+          chat_id: msg.chat.id,
+          message_id: msg.message_id
+        });
+      }
+      console.log('no bots found');
       if (cmd.startsWith('/debug')) {
         return jsonResponse({
             method: 'sendMessage',
