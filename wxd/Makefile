@@ -13,5 +13,8 @@ target/wxd_mmap: bad/wxd_mmap.c
 	gcc bad/wxd_mmap.c -o target/wxd_mmap -O3 -g -Wall -pedantic
 
 target/wxd_intrin: wxd_intrin/wxd_intrin.cc wxd_intrin/render.cc wxd_intrin/render.h wxd_intrin/channel.h
-	clang++ --std=c++20 -O2 -march=znver3 wxd_intrin/wxd_intrin.cc wxd_intrin/render.cc -Iwxd_intrin -o target/wxd_intrin -g -Wall -pedantic $(CFLAGS)
+	clang++ --std=c++20 -O2 -march=znver4 wxd_intrin/wxd_intrin.cc wxd_intrin/render.cc -Iwxd_intrin -o target/wxd_intrin -g -Wall -pedantic $(CFLAGS)
+
+target/wxd_avx512: wxd_avx512/wxd_avx512.cc wxd_avx512/render.cc wxd_avx512/render.h wxd_avx512/channel.h
+	clang++ --std=c++20 -O2 -march=znver4 wxd_avx512/wxd_avx512.cc wxd_avx512/render.cc -Iwxd_avx512 -o target/wxd_avx512 -g -Wall -pedantic $(CFLAGS)
 
