@@ -249,25 +249,14 @@ instance Functor AIStepResult where
 newtype AI a = AI { unAI :: Game (AIStepResult a) }
 
 instance Functor AI where
-  fmap f = AI . fmap f' . (.unAI)
-    where
-    f' = \case
-      Wait c r -> Wait c (fmap f r)
-      Halt -> Halt
-      Pure a -> Pure (f a)
-      Fork k' k -> Fork k' (fmap f k)
+  fmap f = AI . fmap (fmap f) . (.unAI)
 
 instance Applicative AI where
   pure = AI . pure . Pure
-  f <*> a = AI $ f.unAI >>= \case
-    Wait c r -> pure $ Wait c do
-      f' <- r
-      fmap f' a
-    Halt -> a.unAI >> pure Halt
-    Pure f' -> (fmap f' a).unAI
-    Fork k' k -> pure $ Fork k' do
-      f' <- k
-      fmap f' a
+  f <*> a = do
+    f' <- f
+    a' <- a
+    pure $ f' a'
 
 instance Monad AI where
   m >>= f = AI $ m.unAI >>= \case
@@ -313,6 +302,11 @@ stepAIs mgr = AIManager . concat <$> mapM (\(c, k) -> stepN (wait c >> k)) mgr.w
 patBase :: UnitPattern
 patBase = UPType CommandCenter :| UPType OrbitalCommand
 
+nextTick :: AI ()
+nextTick = do
+  t <- game . gets $ (.clock)
+  wait . fmap (== (t + 1)) . gets $ (.clock)
+
 collectResourceAI :: AI ()
 collectResourceAI = do
   wait . fmap (> 0) . countUnits $ idlingScv
@@ -324,6 +318,7 @@ collectResourceAI = do
     let refinerVacancy = numRefineries * 3 - numRefiners
     let minerVacancy = numBases * 16 - numMiners
     assign refinerVacancy minerVacancy =<< findUnits idlingScv
+  nextTick
   collectResourceAI
   where
     idlingScv = UPType Scv :& UPAbilState Idling
@@ -342,7 +337,7 @@ build uid ty = do
   wait do
     state <- get
     sup <- supplyAvailable
-    pure . traceWith (\b -> "Trying to build " ++ show ty ++ " and " ++ show b)  $ ud.mineralsCost <= state.minerals && ud.gasCost <= state.gas && (- ud.supply) <= sup
+    pure $ ud.mineralsCost <= state.minerals && ud.gasCost <= state.gas && (- ud.supply) <= sup
   game do
     modify $ \s -> s
       { minerals = s.minerals - ud.mineralsCost
@@ -358,7 +353,6 @@ buildWorkersAI = do
   buildWorkersAI
   where
     eachBase uid = do
-      game . liftIO . putStrLn $ "Trying build workers"
       -- wait . isIdling $ uid
       build uid Scv
       -- eachBase uid
@@ -379,20 +373,32 @@ buildSupplyAI = do
   where
   chooseScv = [ UPAbilState Idling, UPCasting GatherMinerals, UPCasting GatherGas ]
 
+expandAI :: AI ()
+expandAI = do
+  wait do
+    m <- gets (.minerals)
+    cand <- findUnits $ UPType Scv :& foldr1 (:|) chooseScv
+    pure $ 400 <= m && not (null cand)
+  cand <- game . fmap concat . mapM (findUnits . (UPType Scv :&)) $ chooseScv
+  build (head cand) CommandCenter
+  expandAI
+  where
+  chooseScv = [ UPAbilState Idling, UPCasting GatherMinerals, UPCasting GatherGas ]
+
 printStatus :: Game ()
 printStatus = do
-  clock <- (`div` 10) <$> gets (.clock)
-  let min = clock `div` 60
-  let sec = clock `mod` 60
+  clock <- gets (.clock)
+  let min = (clock `div` 10) `div` 60
+  let sec = (clock `div` 10) `mod` 60
   used <- usedSupply
   cap <- supplyCap
   mb <- gets (.minerals)
   gb <- gets (.gas)
-  liftIO . putStrLn $ show min <> ":" <> show sec <> "\t" <> show mb <> " " <> show gb <> "\t" <> show used <> "/" <> show cap
+  liftIO . putStrLn $ show min <> ":" <> show sec <> "(" <> show clock <> ")" <> "\t" <> show mb <> " " <> show gb <> "\t" <> show used <> "/" <> show cap
   units <- mconcat . map ((<> "\n") . show . snd) . Map.toList <$> gets (.units)
   liftIO . putStrLn $ units
 
-main = runGame (loop (newAIManager [collectResourceAI, buildSupplyAI, buildWorkersAI])) $ openingState
+main = runGame (loop (newAIManager [collectResourceAI, buildSupplyAI, buildWorkersAI, expandAI])) $ openingState
   where
   loop ai = do
     ai' <- stepAIs ai
