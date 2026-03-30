@@ -1,149 +1,296 @@
-type ticks = int (* 10 ticks per second *)
+{-# LANGUAGE OverloadedStrings
+           , LambdaCase
+           , OverloadedRecordDot
+           , NoFieldSelectors
+           , DuplicateRecordFields
+           , BlockArguments
+           #-}
 
-type unit_id = int
+import Data.Text qualified as Text
+import Data.IntMap.Strict qualified as Map
+import Control.Monad.State (gets, modify, runStateT, MonadState, StateT(StateT))
+import Control.Monad (void)
+import Control.Monad.IO.Class (MonadIO(liftIO))
 
-type unit_type =
-    | Scv
-    | Command_center
-    | Refinery
-    | Supply_depot
-    | Barracks
-    | Orbital_command
-    | Reactor
-    | Techlab
-    | Reaper
+type Ticks = Int -- 10 ticks per second
 
-let minerals_cost = function
-    | Scv -> 50
-    | Command_center -> 400
-    | Refinery -> 75
-    | Supply_depot -> 100
-    | Barracks -> 150
-    | Orbital_command -> 150
-    | Reactor -> 50
-    | Techlab -> 50
-    | Reaper -> 50
+type UnitID = Int
 
-let gas_cost = function
-    | Scv | Command_center | Refinery |
-    Supply_depot | Barracks | Orbital_command -> 0
-    | Reactor -> 50
-    | Techlab -> 25
-    | Reaper -> 50
+data UnitType
+  = Scv
+  | CommandCenter
+  | OrbitalCommand
+  | Refinery
+  | SupplyDepot
+  | Barracks
+  | Reactor
+  | TechLab
+  | Reaper
+  deriving (Eq, Ord)
 
-let build_time = function
-    | Scv -> 120
-    | Command_center -> 710
-    | Refinery -> 210
-    | Supply_depot -> 210
-    | Barracks -> 460
-    | Orbital_command -> 250
-    | Reactor -> 360
-    | Techlab -> 180
-    | Reaper -> 32
+data UnitDesc = UnitDesc
+  { name :: Text.Text
+  , mineralsCost :: Int
+  , gasCost :: Int
+  , buildTime :: Int
+  , supply :: Int
+  }
 
-let supply = function
-    | Scv -> -1
-    | Command_center -> 15
-    | Refinery -> 0
-    | Supply_depot -> 8
-    | Barracks | Reactor | Techlab -> 0
-    | Orbital_command -> 15
-    | Reaper -> -1
+unitDesc :: UnitType -> UnitDesc
+unitDesc = \case
+  CommandCenter -> UnitDesc "Command Center" 400 0 710 15
+  OrbitalCommand -> UnitDesc "Orbital Command" 150 0 250 15
+  Refinery -> UnitDesc "Refinery" 75 0 210 0
+  Barracks -> UnitDesc "Barracks" 150 0 460 0
+  Reactor -> UnitDesc "Reactor" 50 50 360 0
+  TechLab -> UnitDesc "Tech Lab" 50 25 180 0
 
-type ability =
-    | Build_unit of unit_type
-    | Morph of unit_type
-    | Gather_minerals
-    | Gather_gas
+  Scv -> UnitDesc "SCV" 50 0 120 (-1)
+  Reaper -> UnitDesc "Reaper" 50 50 320 (-1)
 
-let ability_duration = function
-    | Build_unit unit_type -> build_time unit_type
-    | Morph unit_type -> build_time unit_type
-    | Gather_minerals -> 56
-    | Gather_gas -> 42
+data Ability
+  = Build UnitType
+  | Morph UnitType
+  | GatherMinerals
+  | GatherGas
+  deriving Eq
 
-type unit_state =
-    | Idling
-    | UsingAbility of ability * ticks
+data AbilityDesc = AbilityDesc
+  { name :: Text.Text
+  , effect :: Effect
+  , delay :: Int
+  , coolDown :: Int
+  }
 
-let use_ability ability =
-    UsingAbility (ability, ability_duration ability)
-    
-type unit = unit_id * unit_type * unit_state
+data Effect
+  = CreateUnit UnitType
+  | MorphUnit UnitType
+  | AddMinerals Int
+  | AddGas Int
 
-type unit_store = unit list
+abilityDesc :: Ability -> AbilityDesc
+abilityDesc = \case
+  Build ut -> AbilityDesc ("Build " <> (unitDesc ut).name) (CreateUnit ut) (unitDesc ut).buildTime 0
+  Morph ut -> AbilityDesc ("Morph to " <> (unitDesc ut).name) (MorphUnit ut) (unitDesc ut).buildTime 0
+  GatherMinerals -> AbilityDesc "Gather minerals" (AddMinerals 5) 56 0
+  GatherGas -> AbilityDesc "Gather gas" (AddGas 4) 42 0
 
-let (empty_unit_store : unit_store) = []
+data UnitState = UnitState
+  { ty :: UnitType
+  , abilState :: AbilityState
+  }
+  deriving Eq
 
-let lookup_unit unit_id =
-    List.find (function (id, _, _) -> id = unit_id)
+data AbilityState
+  = Idling
+  | Casting Ability AbilityStage
+  deriving Eq
 
-type unit_pattern =
-    | Pat_and of unit_pattern * unit_pattern
-    | Pat_or of unit_pattern * unit_pattern
-    | Pat_type of unit_type
-    | Pat_state of unit_state
+data AbilityStage
+  = Delay Int
+  | CoolDown Int
+  deriving Eq
 
-let rec match_unit pat ((uid, ut, us) as unit) =
-    match pat with
-        | Pat_and (a, b) -> match_unit a unit && match_unit b unit
-        | Pat_or (a, b) -> match_unit a unit || match_unit b unit
-        | Pat_type t -> t == ut
-        | Pat_state s -> s == us
+initAbilState :: Ability -> AbilityState
+initAbilState ab = Casting ab (Delay (abilityDesc ab).delay)
 
-type global_state = {
-    minerals : int;
-    gas : int;
-    all_units : unit_store;
-    game_clock : int;
-}
+data Unit = Unit
+  { id :: UnitID
+  , state :: UnitState
+  }
 
-let initial_global_state = {
-    minerals = 50;
-    gas = 0;
-    all_units = [
-        (0, Command_center, Idling);
-        (1, Scv, UsingAbility (Gather_minerals, ability_duration Gather_minerals + 0));
-        (2, Scv, UsingAbility (Gather_minerals, ability_duration Gather_minerals + 1));
-        (3, Scv, UsingAbility (Gather_minerals, ability_duration Gather_minerals + 2));
-        (4, Scv, UsingAbility (Gather_minerals, ability_duration Gather_minerals + 3));
-        (5, Scv, UsingAbility (Gather_minerals, ability_duration Gather_minerals + 4));
-        (6, Scv, UsingAbility (Gather_minerals, ability_duration Gather_minerals + 5));
-        (7, Scv, UsingAbility (Gather_minerals, ability_duration Gather_minerals + 6));
-        (8, Scv, UsingAbility (Gather_minerals, ability_duration Gather_minerals + 7));
-        (9, Scv, UsingAbility (Gather_minerals, ability_duration Gather_minerals + 8));
-        (10, Scv, UsingAbility (Gather_minerals, ability_duration Gather_minerals + 9));
-        (11, Scv, UsingAbility (Gather_minerals, ability_duration Gather_minerals + 10));
-        (12, Scv, UsingAbility (Gather_minerals, ability_duration Gather_minerals + 11));
-    ];
-    game_clock = 0;
-}
+data UnitPattern
+  = (:&) UnitPattern UnitPattern
+  | (:|) UnitPattern UnitPattern
+  | UPType UnitType
+  | UPAbilState AbilityState
 
-let supply_available global_state =
-    let state_supply = function
-        | UsingAbility (Build_unit unit_type, _) -> min 0 (supply unit_type)
-        | _ -> 0 in
-    global_state.all_units
-    |> List.map (function (_, unit_type, state) ->
-        supply unit_type + state_supply state)
-    |> List.fold_left (+) 0
+matchUnit :: UnitPattern -> UnitState -> Bool
+matchUnit (a :& b) u =  matchUnit a u && matchUnit b u
+matchUnit (a :| b) u =  matchUnit a u || matchUnit b u
+matchUnit (UPType t) u = t == u.ty
+matchUnit (UPAbilState s) u = s == u.abilState
 
-let supply_cap global_state =
-    global_state.all_units
-    |> List.map (function (_, unit_type, state) -> max 0 (supply unit_type))
-    |> List.fold_left (+) 0
-    |> min 200
+data GameState = GameState
+  { minerals :: Int
+  , gas :: Int
+  , units :: Map.IntMap UnitState
+  , clock :: Int
+  }
 
-let count_units unit_type global_state =
-    global_state.all_units
-    |> List.filter (function (_, ut, _) -> ut = unit_type)
-    |> List.length
+newtype Game a = Game (StateT GameState IO a)
+  deriving (Functor, Applicative, Monad, MonadState GameState, MonadIO)
 
-let count_units_by f global_state =
-    global_state.all_units
-    |> List.filter f
-    |> List.length
+runGame :: Game a -> GameState -> IO (a, GameState)
+runGame (Game g) s = runStateT g s
+
+openingState :: GameState
+openingState = GameState 50 0 units 0
+  where units = Map.fromList
+          [ (0, UnitState CommandCenter Idling)
+          , (1, UnitState Scv (initAbilState GatherMinerals))
+          , (2, UnitState Scv (initAbilState GatherMinerals))
+          , (3, UnitState Scv (initAbilState GatherMinerals))
+          , (4, UnitState Scv (initAbilState GatherMinerals))
+          , (5, UnitState Scv (initAbilState GatherMinerals))
+          , (6, UnitState Scv (initAbilState GatherMinerals))
+          , (7, UnitState Scv (initAbilState GatherMinerals))
+          , (8, UnitState Scv (initAbilState GatherMinerals))
+          , (9, UnitState Scv (initAbilState GatherMinerals))
+          , (10, UnitState Scv (initAbilState GatherMinerals))
+          , (11, UnitState Scv (initAbilState GatherMinerals))
+          , (12, UnitState Scv (initAbilState GatherMinerals))
+          ]
+
+supplyAvailable :: Game Int
+supplyAvailable = sum . map toSupply . Map.toList <$> gets (.units)
+  where
+  toSupply (_, u) = (unitDesc u.ty).supply + stateSupply
+    where
+    stateSupply = case u.abilState of
+      Casting (Build ty') (Delay _) -> (unitDesc ty').supply
+      _ -> 0
+
+supplyCap :: Game Int
+supplyCap = sum . filter (> 0) . map toSupply . Map.toList <$> gets (.units)
+  where
+  toSupply (_, u) = (unitDesc u.ty).supply
+
+findUnits :: UnitPattern -> Game [UnitID]
+findUnits p = map fst . filter (matchUnit p . snd) . Map.toList <$> gets (.units)
+
+countUnits :: UnitPattern -> Game Int
+countUnits = fmap length <$> findUnits
+
+nextUnitID :: Game Int
+nextUnitID = maybe 0 ((+ 1) . fst) . Map.lookupMax <$> gets (.units)
+
+modifyUnit :: UnitID -> (UnitState -> (a, UnitState)) -> Game a
+modifyUnit i f = do
+  old <- gets (.units)
+  let (r, u) = f (old Map.! i)
+  modify \s -> s { units = Map.insert i u old }
+  pure r
+
+modifyUnit' :: UnitID -> (UnitState -> UnitState) -> Game ()
+modifyUnit' i f = modifyUnit i (((), ) <$> f)
+
+addUnit :: UnitType -> Game UnitID
+addUnit ty = do
+  i <- nextUnitID
+  modify \s -> s { units = Map.insert i (UnitState ty Idling) s.units }
+  pure i
+
+getUnit :: UnitID -> Game UnitState
+getUnit i = (Map.! i) <$> gets (.units)
+
+setUnit :: UnitID -> UnitState -> Game ()
+setUnit i s = modifyUnit i (const ((), s))
+
+setAbilState :: UnitID -> AbilityState -> Game ()
+setAbilState uid s = modifyUnit' uid (\u -> u { abilState = s })
+
+tick :: Game ()
+tick = do
+  ids <- map fst . Map.toList <$> gets (.units)
+  mapM_ tickUnit ids
+  modify (\s -> s { clock = s.clock + 1 })
+  where
+    tickUnit :: UnitID -> Game ()
+    tickUnit uid = (.abilState) <$> getUnit uid >>= \case
+      Idling -> pure ()
+      Casting ab (Delay n) | n > 0 ->
+        setAbilState uid (Casting ab (Delay (n - 1)))
+      Casting ab (Delay 0) -> do
+        let cd = (abilityDesc ab).coolDown
+        if cd == 0
+          then setAbilState uid Idling
+          else setAbilState uid (Casting ab (CoolDown (abilityDesc ab).coolDown))
+        case (abilityDesc ab).effect of
+          CreateUnit t -> void $ addUnit t
+          MorphUnit t -> setUnit uid (UnitState t Idling)
+          AddMinerals m -> modify (\s -> s { minerals = s.minerals + m })
+          AddGas g -> modify (\s -> s { gas = s.gas + g })
+      Casting ab (CoolDown n) | n > 0 ->
+        setAbilState uid (Casting ab (CoolDown (n - 1)))
+      Casting ab (CoolDown 0) ->
+        setAbilState uid Idling
+
+data AIStepResult a where
+  Wait :: Game Bool -> AI a -> AIStepResult a
+  Halt :: AIStepResult a
+  Pure :: a -> AIStepResult a
+  deriving Functor
+
+newtype AI a = AI { unAI :: Game (AIStepResult a) }
+
+instance Functor AI where
+  fmap f = AI . fmap f' . (.unAI)
+    where
+    f' = \case
+      Wait c r -> Wait c (fmap f r)
+      Halt -> Halt
+      Pure a -> Pure (f a)
+
+instance Applicative AI where
+  pure = AI . pure . Pure
+  f <*> a = AI $ f.unAI >>= \case
+    Wait c r -> pure $ Wait c do
+      f' <- r
+      fmap f' a
+    Halt -> a.unAI >> pure Halt
+    Pure f' -> (fmap f' a).unAI
+
+instance Monad AI where
+  m >>= f = AI $ m.unAI >>= \case
+    Wait c r -> pure . Wait c $ r >>= f
+    Halt -> pure Halt
+    Pure a -> (f a).unAI
+
+runAIStep :: AI a -> Game (AIStepResult a)
+runAIStep = (.unAI)
+
+game :: Game a -> AI a
+game = AI . fmap Pure
+
+wait :: Game Bool -> AI ()
+wait c = AI . pure . Wait c $ pure ()
+
+halt :: AI a
+halt = AI . pure $ Halt
+
+data AIManager = AIManager
+  { waiters :: [(Game Bool, AI ())]
+  }
+
+stepAIs :: AIManager -> Game AIManager
+stepAIs mgr = AIManager . concat <$> mapM step mgr.waiters
+  where
+  step (c, k) = c >>= \case
+    True -> runAIStep k >>= \case
+      Halt -> pure []
+      Wait c' k' -> pure [(c', k')]
+      Pure _ -> pure []
+    False -> pure [(c, k)]
+
+scvAI :: UnitID -> AI ()
+scvAI uid = do
+  wait do
+    (.abilState) <$> getUnit uid >>= \case
+      Idling -> pure True
+      _ -> pure False
+  game $ setAbilState uid (initAbilState GatherMinerals)
+  scvAI uid
+
+main = runGame (loop (AIManager [(pure True, scvAI 1)])) $ openingState
+  where
+  loop ai = do
+    ai' <- stepAIs ai
+    tick
+    liftIO . print =<< gets (.minerals)
+    loop ai'
+
+{-
 
 let next_tick global_state =
     let minerals_diff = ref 0 in
@@ -357,3 +504,5 @@ let () =
         (Pat_and (Pat_type Orbital_command, Pat_state Idling), use_ability (Build_unit Scv));
         (Pat_and (Pat_type Orbital_command, Pat_state Idling), use_ability (Build_unit Scv));
     ]
+
+-}
