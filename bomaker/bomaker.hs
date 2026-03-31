@@ -223,7 +223,7 @@ tick = do
         let cd = (abilityDesc ab).coolDown
         if cd == 0
           then setAbilState uid Idling
-          else setAbilState uid (Casting ab (CoolDown (abilityDesc ab).coolDown))
+          else setAbilState uid (Casting ab (CoolDown cd))
         case (abilityDesc ab).effect of
           CreateUnit t -> void $ addUnit t
           MorphUnit t -> setUnit uid (UnitState t Idling)
@@ -235,13 +235,13 @@ tick = do
         setAbilState uid Idling
 
 data AIStepResult a where
-  Wait :: Game Bool -> AI a -> AIStepResult a
+  Wait :: Game (Maybe b) -> (b -> AI a) -> AIStepResult a
   Halt :: AIStepResult a
   Pure :: a -> AIStepResult a
   Fork :: AI b -> AI a -> AIStepResult a
 
 instance Functor AIStepResult where
-  fmap f (Wait c r) = Wait c (fmap f r)
+  fmap f (Wait c r) = Wait c (fmap (fmap f) r)
   fmap f Halt = Halt
   fmap f (Pure a) = Pure (f a)
   fmap f (Fork k' k) = Fork k' (fmap f k)
@@ -260,7 +260,7 @@ instance Applicative AI where
 
 instance Monad AI where
   m >>= f = AI $ m.unAI >>= \case
-    Wait c r -> pure . Wait c $ r >>= f
+    Wait c r -> pure . Wait c $ fmap (>>= f) r
     Halt -> pure Halt
     Pure a -> (f a).unAI
     Fork k' k -> pure . Fork k' $ k >>= f
@@ -271,8 +271,8 @@ runAIStep = (.unAI)
 game :: Game a -> AI a
 game = AI . fmap Pure
 
-wait :: Game Bool -> AI ()
-wait c = AI . pure . Wait c $ pure ()
+wait :: Game (Maybe a) -> AI a
+wait c = AI . pure . Wait c $ pure
 
 halt :: AI a
 halt = AI . pure $ Halt
@@ -281,21 +281,21 @@ fork :: AI b -> AI ()
 fork k = AI . pure . Fork k $ pure ()
 
 data AIManager = AIManager
-  { waiters :: [(Game Bool, AI ())]
+  { threads :: [AI ()]
   }
 
 newAIManager :: [AI ()] -> AIManager
-newAIManager = AIManager . map (pure True, )
+newAIManager = AIManager
 
 stepAIs :: AIManager -> Game AIManager
-stepAIs mgr = AIManager . concat <$> mapM (\(c, k) -> stepN (wait c >> k)) mgr.waiters
+stepAIs mgr = AIManager . concat <$> mapM stepN mgr.threads
   where
-  stepN :: AI () -> Game [(Game Bool, AI ())]
+  stepN :: AI () -> Game [AI ()]
   stepN action = runAIStep action >>= \case
     Halt -> pure []
     Wait c k -> c >>= \case
-      False -> pure [(c, k)]
-      True -> stepN k
+      Nothing -> pure [wait c >>= k]
+      Just a -> stepN (k a)
     Pure _ -> pure []
     Fork k k' -> liftA2 (++) (stepN (void k)) (stepN k')
 
@@ -305,11 +305,19 @@ patBase = UPType CommandCenter :| UPType OrbitalCommand
 nextTick :: AI ()
 nextTick = do
   t <- game . gets $ (.clock)
-  wait . fmap (== (t + 1)) . gets $ (.clock)
+  wait . fmap (\c -> if c == (t + 1) then Just () else Nothing) . gets $ (.clock)
+
+notEmpty :: [a] -> Maybe [a]
+notEmpty [] = Nothing
+notEmpty xs = Just xs
+
+headMaybe :: [a] -> Maybe a
+headMaybe [] = Nothing
+headMaybe (x : _) = Just x
 
 collectResourceAI :: AI ()
 collectResourceAI = do
-  wait . fmap (> 0) . countUnits $ idlingScv
+  scvs <- wait . fmap notEmpty . findUnits $ UPType Scv :& UPAbilState Idling
   game do
     numBases <- countUnits patBase
     numRefineries <- countUnits . UPType $ Refinery
@@ -317,11 +325,10 @@ collectResourceAI = do
     numRefiners <- countUnits $ UPType Scv :& UPCasting GatherGas
     let refinerVacancy = numRefineries * 3 - numRefiners
     let minerVacancy = numBases * 16 - numMiners
-    assign refinerVacancy minerVacancy =<< findUnits idlingScv
+    assign refinerVacancy minerVacancy scvs
   nextTick
   collectResourceAI
   where
-    idlingScv = UPType Scv :& UPAbilState Idling
     assign rv mv [] = pure ()
     assign rv mv (uid : rest) | rv > 0 = do
       setAbilState uid (initAbilState GatherGas)
@@ -331,13 +338,15 @@ collectResourceAI = do
       assign 0 (mv - 1) rest
     assign 0 0 _ = pure ()
 
-build :: UnitID -> UnitType -> AI ()
-build uid ty = do
+build :: Game (Maybe UnitID) -> UnitType -> AI ()
+build findBuilder ty = do
   let ud = unitDesc ty
-  wait do
+  uid <- wait do
     state <- get
     sup <- supplyAvailable
-    pure $ ud.mineralsCost <= state.minerals && ud.gasCost <= state.gas && (- ud.supply) <= sup
+    if ud.mineralsCost <= state.minerals && ud.gasCost <= state.gas && (- ud.supply) <= sup
+      then findBuilder
+      else pure Nothing
   game do
     modify $ \s -> s
       { minerals = s.minerals - ud.mineralsCost
@@ -347,43 +356,31 @@ build uid ty = do
 
 buildWorkersAI :: AI ()
 buildWorkersAI = do
-  wait . fmap (> 0) . countUnits $ patBase :& UPAbilState Idling
-  ids <- game . findUnits $ patBase :& UPAbilState Idling
-  mapM_ eachBase ids
+  build findBase Scv
   buildWorkersAI
   where
-    eachBase uid = do
-      -- wait . isIdling $ uid
-      build uid Scv
-      -- eachBase uid
-    isIdling uid = (.abilState) <$> getUnit uid >>= \case
-      Idling -> pure True
-      _ -> pure False
+    findBase = fmap headMaybe . findUnits $ patBase :& UPAbilState Idling
+
+pickWorker :: Game (Maybe UnitID)
+pickWorker = fmap (headMaybe . concat) . mapM (findUnits . (UPType Scv :&)) $
+  [ UPAbilState Idling, UPCasting GatherMinerals, UPCasting GatherGas ]
 
 buildSupplyAI :: AI ()
 buildSupplyAI = do
-  wait do
-    sup <- supplyAvailable
-    already <- countUnits $ UPType Scv :& UPCasting (Build SupplyDepot)
-    cand <- findUnits $ UPType Scv :& foldr1 (:|) chooseScv
-    pure $ sup < 10 && already < 2 && not (null cand)
-  cand <- game . fmap concat . mapM (findUnits . (UPType Scv :&)) $ chooseScv
-  build (head cand) SupplyDepot
+  build findScv SupplyDepot
   buildSupplyAI
   where
-  chooseScv = [ UPAbilState Idling, UPCasting GatherMinerals, UPCasting GatherGas ]
+  findScv = do
+    sup <- supplyAvailable
+    already <- countUnits $ UPType Scv :& UPCasting (Build SupplyDepot)
+    if sup < 10 && already < 2
+      then pickWorker
+      else pure Nothing
 
 expandAI :: AI ()
 expandAI = do
-  wait do
-    m <- gets (.minerals)
-    cand <- findUnits $ UPType Scv :& foldr1 (:|) chooseScv
-    pure $ 400 <= m && not (null cand)
-  cand <- game . fmap concat . mapM (findUnits . (UPType Scv :&)) $ chooseScv
-  build (head cand) CommandCenter
+  build pickWorker CommandCenter
   expandAI
-  where
-  chooseScv = [ UPAbilState Idling, UPCasting GatherMinerals, UPCasting GatherGas ]
 
 printStatus :: Game ()
 printStatus = do
@@ -404,7 +401,7 @@ main = runGame (loop (newAIManager [collectResourceAI, buildSupplyAI, buildWorke
     ai' <- stepAIs ai
     tick
     printStatus
-    liftIO . putStrLn $ "no. AI threads: " <> show (length ai.waiters)
+    liftIO . putStrLn $ "no. AI threads: " <> show (length ai.threads)
     loop ai'
 
 {-
