@@ -10,7 +10,7 @@ import Data.Text qualified as Text
 import Data.Text.IO qualified as Text
 import Data.IntMap.Strict qualified as Map
 import Control.Monad.State (get, gets, modify, runStateT, MonadState, StateT(StateT))
-import Control.Monad (void)
+import Control.Monad (void, replicateM_)
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Debug.Trace (traceWith)
 
@@ -152,27 +152,33 @@ openingState = GameState 50 0 units 0
           ]
 
 supplyAvailable :: Game Int
-supplyAvailable = sum . map toSupply . Map.toList <$> gets (.units)
+supplyAvailable = sum . map (toSupply . snd) . Map.toList <$> gets (.units)
   where
-  toSupply (_, u) = (unitDesc u.ty).supply + stateSupply
+  toSupply (UnitState ty abil) = (unitDesc ty).supply + stateSupply
     where
-    stateSupply = case u.abilState of
+    stateSupply = case abil of
       Casting (Build ty') (Delay _) -> (unitDesc ty').supply
+      Casting (Morph ty') (Delay _) -> (unitDesc ty').supply - (unitDesc ty).supply
       _ -> 0
 
 usedSupply :: Game Int
-usedSupply = negate . sum . map toSupply . Map.toList <$> gets (.units)
+usedSupply = negate . sum . map (toSupply . snd) . Map.toList <$> gets (.units)
   where
-  toSupply (_, u) = min 0 (unitDesc u.ty).supply + stateSupply
+  toSupply (UnitState ty abil) = min 0 (unitDesc ty).supply + min 0 stateSupply
     where
-    stateSupply = case u.abilState of
-      Casting (Build ty') (Delay _) -> min 0 (unitDesc ty').supply
+    stateSupply = case abil of
+      Casting (Build ty') (Delay _) -> (unitDesc ty').supply
+      Casting (Morph ty') (Delay _) -> (unitDesc ty').supply - (unitDesc ty).supply
       _ -> 0
 
 supplyCap :: Game Int
-supplyCap = sum . filter (> 0) . map toSupply . Map.toList <$> gets (.units)
+supplyCap = sum . map (toSupply . snd) . Map.toList <$> gets (.units)
   where
-  toSupply (_, u) = (unitDesc u.ty).supply
+  toSupply (UnitState ty abil) = max 0 (unitDesc ty).supply + morphDiff
+    where
+    morphDiff = case abil of
+      Casting (Morph ty') (Delay _) -> (unitDesc ty').supply - (unitDesc ty).supply
+      _ -> 0
 
 findUnits :: UnitPattern -> Game [UnitID]
 findUnits p = map fst . filter (matchUnit p . snd) . Map.toList <$> gets (.units)
@@ -354,6 +360,22 @@ build findBuilder ty = do
       }
     setAbilState uid . initAbilState . Build $ ty
 
+morph :: Game (Maybe UnitID) -> UnitType -> AI ()
+morph findSelf intoTy = do
+  let ud = unitDesc intoTy
+  uid <- wait do
+    state <- get
+    sup <- supplyAvailable
+    if ud.mineralsCost <= state.minerals && ud.gasCost <= state.gas && (- ud.supply) <= sup
+      then findSelf
+      else pure Nothing
+  game do
+    modify $ \s -> s
+      { minerals = s.minerals - ud.mineralsCost
+      , gas = s.gas - ud.gasCost
+      }
+    setAbilState uid . initAbilState . Morph $ intoTy
+
 buildWorkersAI :: AI ()
 buildWorkersAI = do
   build findBase Scv
@@ -382,6 +404,38 @@ expandAI = do
   build pickWorker CommandCenter
   expandAI
 
+upgradeCCAI :: AI ()
+upgradeCCAI = do
+  morph findBase OrbitalCommand
+  upgradeCCAI
+  where
+  findBase = fmap headMaybe . findUnits $ UPType CommandCenter :& UPAbilState Idling
+
+buildOrderAI :: AI ()
+buildOrderAI = do
+  fork collectResourceAI
+  fork logAI
+  let mainBase = fmap headMaybe . findUnits $ UPType CommandCenter :& UPAbilState Idling
+  build mainBase Scv
+  build mainBase Scv
+  build pickWorker SupplyDepot
+  build mainBase Scv
+  build mainBase Scv
+  build pickWorker Barracks
+  build pickWorker Refinery
+  build mainBase Scv
+  build mainBase Scv
+  build mainBase Scv
+  morph mainBase OrbitalCommand
+  build (fmap headMaybe . findUnits $ UPType Barracks) Reaper
+  build pickWorker CommandCenter
+
+logAI :: AI ()
+logAI = do
+  game printStatus
+  replicateM_ 10 nextTick
+  logAI
+
 printStatus :: Game ()
 printStatus = do
   clock <- gets (.clock)
@@ -395,13 +449,12 @@ printStatus = do
   units <- mconcat . map ((<> "\n") . show . snd) . Map.toList <$> gets (.units)
   liftIO . putStrLn $ units
 
-main = runGame (loop (newAIManager [collectResourceAI, buildSupplyAI, buildWorkersAI, expandAI])) $ openingState
+main = runGame (loop (newAIManager [buildOrderAI])) $ openingState
   where
   loop ai = do
+    liftIO . putStrLn $ "no. AI threads: " <> show (length ai.threads)
     ai' <- stepAIs ai
     tick
-    printStatus
-    liftIO . putStrLn $ "no. AI threads: " <> show (length ai.threads)
     loop ai'
 
 {-
